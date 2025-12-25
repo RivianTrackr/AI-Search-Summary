@@ -3,7 +3,7 @@
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add an OpenAI powered AI summary to WordPress search on RivianTrackr.com without delaying normal results, with analytics, cache control, and collapsible sources.
- * Version: 3.1.1
+ * Version: 3.1.2
  * Author URI: https://riviantrackr.com
  * Author: RivianTrackr
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ class RivianTrackr_AI_Search {
     private $option_name         = 'rt_ai_search_options';
     private $models_cache_option = 'rt_ai_search_models_cache';
     private $cache_keys_option   = 'rt_ai_search_cache_keys';
-    private $cache_prefix        = 'rt_ai_search_v3_1_0_';
+    private $cache_prefix        = 'rt_ai_search_v3_1_2_';
     private $cache_ttl           = 3600;
 
     private $logs_table_checked = false;
@@ -30,12 +30,6 @@ class RivianTrackr_AI_Search {
         add_action( 'wp_dashboard_setup', array( $this, 'register_dashboard_widget' ) );
         add_action( 'loop_start', array( $this, 'inject_ai_summary_placeholder' ) );
         add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
-
-        // Add "Settings" and "Analytics" links on the Plugins page
-        add_filter( 
-            'plugin_action_links_' . plugin_basename( __FILE__ ),
-            array( $this, 'add_plugin_action_links' ) 
-        );
     }
 
     /* ---------------------------------------------------------
@@ -142,12 +136,12 @@ class RivianTrackr_AI_Search {
 
     public function get_options() {
         $defaults = array(
-            'api_key'             => '',
-            'model'               => 'gpt-4o-mini',
-            'max_posts'           => 6,
-            'enable'              => 0,
-            'max_calls_per_minute'=> 30,
-            'cache_ttl'           => 3600,
+            'api_key'              => '',
+            'model'                => 'gpt-4o-mini',
+            'max_posts'            => 6,
+            'enable'               => 0,
+            'max_calls_per_minute' => 30,
+            'cache_ttl'            => 3600,
         );
 
         $opts = get_option( $this->option_name, array() );
@@ -181,23 +175,10 @@ class RivianTrackr_AI_Search {
         return $output;
     }
 
-    public function add_plugin_action_links( $links ) {
-        $settings_url  = admin_url( 'admin.php?page=rt-ai-search-settings' );
-        $analytics_url = admin_url( 'admin.php?page=rt-ai-search-analytics' );
-
-        $custom_links = array();
-
-        // Settings link always first
-        $custom_links[] = '<a href="' . esc_url( $settings_url ) . '">Settings</a>';
-
-        return array_merge( $custom_links, $links );
-    }
-
     public function add_settings_page() {
         $capability  = 'manage_options';
         $parent_slug = 'rt-ai-search-settings';
 
-        // Top level: AI Search
         add_menu_page(
             'AI Search',
             'AI Search',
@@ -208,7 +189,6 @@ class RivianTrackr_AI_Search {
             65
         );
 
-        // Settings submenu
         add_submenu_page(
             $parent_slug,
             'AI Search Settings',
@@ -218,7 +198,6 @@ class RivianTrackr_AI_Search {
             array( $this, 'render_settings_page' )
         );
 
-        // Analytics submenu
         add_submenu_page(
             $parent_slug,
             'AI Search Analytics',
@@ -634,10 +613,6 @@ class RivianTrackr_AI_Search {
      *  Analytics page
      * --------------------------------------------------------- */
 
-    /* ---------------------------------------------------------
-     *  Analytics page
-     * --------------------------------------------------------- */
-
     public function render_analytics_page() {
         if ( ! current_user_can( 'manage_options' ) ) {
             return;
@@ -698,9 +673,8 @@ class RivianTrackr_AI_Search {
         global $wpdb;
         $table_name = self::get_logs_table_name();
 
-        // Overall summary
         $totals = $wpdb->get_row(
-            "SELECT 
+            "SELECT
                 COUNT(*) AS total,
                 SUM(ai_success) AS success_count,
                 SUM(CASE WHEN ai_success = 0 AND (ai_error IS NOT NULL AND ai_error <> '') THEN 1 ELSE 0 END) AS error_count
@@ -717,7 +691,6 @@ class RivianTrackr_AI_Search {
         );
         $no_results_count = (int) $no_results_count;
 
-        // Last 24 hours
         $since_24h = gmdate( 'Y-m-d H:i:s', time() - 24 * 60 * 60 );
         $last_24   = $wpdb->get_var(
             $wpdb->prepare(
@@ -727,9 +700,8 @@ class RivianTrackr_AI_Search {
         );
         $last_24 = (int) $last_24;
 
-        // 14 day trend
         $daily_stats = $wpdb->get_results(
-            "SELECT 
+            "SELECT
                 DATE(created_at) AS day,
                 COUNT(*) AS total,
                 SUM(ai_success) AS success_count
@@ -739,7 +711,6 @@ class RivianTrackr_AI_Search {
              LIMIT 14"
         );
 
-        // Top queries (all time)
         $top_queries = $wpdb->get_results(
             "SELECT search_query, COUNT(*) AS total, SUM(ai_success) AS success_count
              FROM $table_name
@@ -748,7 +719,6 @@ class RivianTrackr_AI_Search {
              LIMIT 20"
         );
 
-        // Top error messages
         $top_errors = $wpdb->get_results(
             "SELECT ai_error, COUNT(*) AS total
              FROM $table_name
@@ -758,7 +728,6 @@ class RivianTrackr_AI_Search {
              LIMIT 10"
         );
 
-        // Recent events
         $recent_events = $wpdb->get_results(
             "SELECT *
              FROM $table_name
@@ -767,42 +736,30 @@ class RivianTrackr_AI_Search {
         );
         ?>
 
-        <!-- Summary cards -->
         <h2>Overview</h2>
         <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem;">
             <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">
-                    Total AI searches
-                </h3>
+                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Total AI searches</h3>
                 <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $total_searches ); ?></p>
             </div>
             <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">
-                    Overall success rate
-                </h3>
+                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Overall success rate</h3>
                 <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $success_rate ); ?>%</p>
             </div>
             <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">
-                    Searches last 24 hours
-                </h3>
+                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Searches last 24 hours</h3>
                 <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $last_24 ); ?></p>
             </div>
             <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">
-                    Total AI errors
-                </h3>
+                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Total AI errors</h3>
                 <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $error_count ); ?></p>
             </div>
             <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">
-                    Searches with no results
-                </h3>
+                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Searches with no results</h3>
                 <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $no_results_count ); ?></p>
             </div>
         </div>
 
-        <!-- 14 day trend -->
         <h2>Last 14 days</h2>
         <?php if ( ! empty( $daily_stats ) ) : ?>
             <table class="widefat striped" style="max-width: 600px;">
@@ -832,7 +789,6 @@ class RivianTrackr_AI_Search {
             <p>No recent activity yet.</p>
         <?php endif; ?>
 
-        <!-- Top queries -->
         <h2 style="margin-top: 2rem;">Top search queries</h2>
         <?php if ( ! empty( $top_queries ) ) : ?>
             <table class="widefat striped" style="max-width: 900px;">
@@ -862,7 +818,6 @@ class RivianTrackr_AI_Search {
             <p>No search data yet.</p>
         <?php endif; ?>
 
-        <!-- Top errors -->
         <h2 style="margin-top: 2rem;">Top AI errors</h2>
         <?php if ( ! empty( $top_errors ) ) : ?>
             <table class="widefat striped" style="max-width: 900px;">
@@ -893,7 +848,6 @@ class RivianTrackr_AI_Search {
             <p>No AI errors logged yet.</p>
         <?php endif; ?>
 
-        <!-- Recent events -->
         <h2 style="margin-top: 2rem;">Recent AI search events</h2>
         <?php if ( ! empty( $recent_events ) ) : ?>
             <table class="widefat striped" style="max-width: 1000px;">
@@ -1036,7 +990,124 @@ class RivianTrackr_AI_Search {
     }
 
     /* ---------------------------------------------------------
-     *  Frontend placeholder (spinner, mobile friendly, OpenAI badge)
+     *  Relevance scoring helpers
+     * --------------------------------------------------------- */
+
+    private function normalize_text( $text ) {
+        $text = (string) $text;
+        $text = strtolower( $text );
+        $text = wp_strip_all_tags( $text );
+        $text = preg_replace( '/[^a-z0-9\s]+/i', ' ', $text );
+        $text = preg_replace( '/\s+/', ' ', $text );
+        return trim( $text );
+    }
+
+    private function query_tokens( $query ) {
+        $q = $this->normalize_text( $query );
+        if ( $q === '' ) {
+            return array();
+        }
+
+        $parts = explode( ' ', $q );
+
+        $tokens = array();
+        foreach ( $parts as $t ) {
+            $t = trim( $t );
+            if ( strlen( $t ) >= 3 ) {
+                $tokens[] = $t;
+            }
+        }
+
+        return array_values( array_unique( $tokens ) );
+    }
+
+    private function post_term_text( $post_id ) {
+        $names = array();
+
+        $cats = wp_get_post_terms( $post_id, 'category', array( 'fields' => 'names' ) );
+        if ( is_array( $cats ) ) {
+            $names = array_merge( $names, $cats );
+        }
+
+        $tags = wp_get_post_terms( $post_id, 'post_tag', array( 'fields' => 'names' ) );
+        if ( is_array( $tags ) ) {
+            $names = array_merge( $names, $tags );
+        }
+
+        if ( empty( $names ) ) {
+            return '';
+        }
+
+        return $this->normalize_text( implode( ' ', $names ) );
+    }
+
+    private function score_post_for_query( $search_query, $tokens, $post ) {
+        $score = 0;
+
+        $q_norm = $this->normalize_text( $search_query );
+
+        $title   = $this->normalize_text( get_the_title( $post ) );
+        $content = $this->normalize_text( $post->post_content );
+        $terms   = $this->post_term_text( $post->ID );
+
+        if ( $q_norm !== '' && $title !== '' ) {
+            if ( strpos( $title, $q_norm ) !== false ) {
+                $score += 20;
+            }
+        }
+
+        $title_hits = 0;
+        foreach ( $tokens as $t ) {
+            if ( $t !== '' && strpos( $title, $t ) !== false ) {
+                $title_hits++;
+            }
+        }
+
+        if ( $title_hits > 0 ) {
+            $score += 5;
+            $score += min( 10, $title_hits * 2 );
+        }
+
+        $term_hits = 0;
+        foreach ( $tokens as $t ) {
+            if ( $t !== '' && $terms !== '' && strpos( $terms, $t ) !== false ) {
+                $term_hits++;
+            }
+        }
+        if ( $term_hits > 0 ) {
+            $score += 4;
+            $score += min( 6, $term_hits );
+        }
+
+        $content_hits = 0;
+        foreach ( $tokens as $t ) {
+            if ( $t !== '' && $content !== '' && strpos( $content, $t ) !== false ) {
+                $content_hits++;
+            }
+        }
+        if ( $content_hits > 0 ) {
+            $score += 2;
+            $score += min( 8, $content_hits );
+        }
+
+        $post_ts = strtotime( $post->post_date_gmt ? $post->post_date_gmt : $post->post_date );
+        if ( $post_ts ) {
+            $age_days = ( time() - $post_ts ) / DAY_IN_SECONDS;
+
+            if ( $age_days <= 7 ) {
+                $score += 6;
+            } elseif ( $age_days <= 30 ) {
+                $score += 3;
+            } elseif ( $age_days <= 180 ) {
+                $score += 1;
+            }
+        }
+
+        return $score;
+    }
+
+    /* ---------------------------------------------------------
+     *  Frontend placeholder
      * --------------------------------------------------------- */
 
     public function inject_ai_summary_placeholder( $query ) {
@@ -1345,112 +1416,63 @@ class RivianTrackr_AI_Search {
 
         $post_type = 'any';
 
-        $posts_for_ai = array();
-        $used_ids     = array();
+        // Pull a larger candidate pool, then score and select the best results.
+        $candidate_limit = max( 20, min( 60, $max_posts * 8 ) );
 
-        $recent_date = gmdate( 'Y-m-d', time() - 30 * DAY_IN_SECONDS );
-
-        $recent_args = array(
-            's'              => $search_query,
-            'post_type'      => $post_type,
-            'posts_per_page' => $max_posts,
-            'post_status'    => 'publish',
-            'date_query'     => array(
-                array(
-                    'after'     => $recent_date,
-                    'inclusive' => true,
-                    'column'    => 'post_date',
-                ),
-            ),
+        $candidate_args = array(
+            's'                   => $search_query,
+            'post_type'           => $post_type,
+            'posts_per_page'      => $candidate_limit,
+            'post_status'         => 'publish',
+            'ignore_sticky_posts' => true,
+            'no_found_rows'       => true,
         );
 
-        $recent_query = new WP_Query( $recent_args );
+        $candidate_query = new WP_Query( $candidate_args );
+        $candidates      = $candidate_query->have_posts() ? $candidate_query->posts : array();
 
-        if ( $recent_query->have_posts() ) {
-            foreach ( $recent_query->posts as $post ) {
-                $used_ids[] = $post->ID;
+        $tokens = $this->query_tokens( $search_query );
 
-                $content = wp_strip_all_tags( $post->post_content );
-                $content = mb_substr( $content, 0, 400 );
+        $scored = array();
+        foreach ( $candidates as $post ) {
+            $score = $this->score_post_for_query( $search_query, $tokens, $post );
 
-                $posts_for_ai[] = array(
-                    'id'      => $post->ID,
-                    'title'   => get_the_title( $post ),
-                    'url'     => get_permalink( $post ),
-                    'excerpt' => mb_substr( $content, 0, 200 ),
-                    'content' => $content,
-                    'type'    => $post->post_type,
-                    'date'    => get_the_date( 'Y-m-d', $post ),
-                );
-            }
+            $scored[] = array(
+                'post'  => $post,
+                'score' => $score,
+                'date'  => strtotime( $post->post_date_gmt ? $post->post_date_gmt : $post->post_date ),
+            );
         }
 
-        $remaining = $max_posts - count( $posts_for_ai );
-        if ( $remaining > 0 ) {
-            $older_args = array(
-                's'              => $search_query,
-                'post_type'      => $post_type,
-                'posts_per_page' => $remaining,
-                'post_status'    => 'publish',
-                'post__not_in'   => $used_ids,
-                'date_query'     => array(
-                    array(
-                        'before'    => $recent_date,
-                        'inclusive' => false,
-                        'column'    => 'post_date',
-                    ),
-                ),
-            );
-
-            $older_query = new WP_Query( $older_args );
-
-            if ( $older_query->have_posts() ) {
-                foreach ( $older_query->posts as $post ) {
-                    $content = wp_strip_all_tags( $post->post_content );
-                    $content = mb_substr( $content, 0, 400 );
-
-                    $posts_for_ai[] = array(
-                        'id'      => $post->ID,
-                        'title'   => get_the_title( $post ),
-                        'url'     => get_permalink( $post ),
-                        'excerpt' => mb_substr( $content, 0, 200 ),
-                        'content' => $content,
-                        'type'    => $post->post_type,
-                        'date'    => get_the_date( 'Y-m-d', $post ),
-                    );
-                }
+        usort( $scored, function( $a, $b ) {
+            if ( $a['score'] === $b['score'] ) {
+                $ad = isset( $a['date'] ) ? (int) $a['date'] : 0;
+                $bd = isset( $b['date'] ) ? (int) $b['date'] : 0;
+                return $bd <=> $ad;
             }
-        }
+            return $b['score'] <=> $a['score'];
+        } );
 
-        if ( count( $posts_for_ai ) < $max_posts ) {
-            $remaining_fallback = $max_posts - count( $posts_for_ai );
-
-            $fallback_args = array(
-                's'              => $search_query,
-                'post_type'      => $post_type,
-                'posts_per_page' => $remaining_fallback,
-                'post_status'    => 'publish',
-                'post__not_in'   => wp_list_pluck( $posts_for_ai, 'id' ),
-            );
-
-            $fallback_query = new WP_Query( $fallback_args );
-
-            if ( $fallback_query->have_posts() ) {
-                foreach ( $fallback_query->posts as $post ) {
-                    $content = wp_strip_all_tags( $post->post_content );
-                    $content = mb_substr( $content, 0, 400 );
-
-                    $posts_for_ai[] = array(
-                        'id'      => $post->ID,
-                        'title'   => get_the_title( $post ),
-                        'url'     => get_permalink( $post ),
-                        'excerpt' => mb_substr( $content, 0, 200 ),
-                        'content' => $content,
-                        'type'    => $post->post_type,
-                        'date'    => get_the_date( 'Y-m-d', $post ),
-                    );
-                }
+        $posts_for_ai = array();
+        foreach ( $scored as $row ) {
+            if ( count( $posts_for_ai ) >= $max_posts ) {
+                break;
             }
+
+            $post = $row['post'];
+
+            $content = wp_strip_all_tags( $post->post_content );
+            $content = mb_substr( $content, 0, 400 );
+
+            $posts_for_ai[] = array(
+                'id'      => $post->ID,
+                'title'   => get_the_title( $post ),
+                'url'     => get_permalink( $post ),
+                'excerpt' => mb_substr( $content, 0, 200 ),
+                'content' => $content,
+                'type'    => $post->post_type,
+                'date'    => get_the_date( 'Y-m-d', $post ),
+            );
         }
 
         $results_count = count( $posts_for_ai );
@@ -1675,7 +1697,7 @@ Always respond as a single JSON object using this structure:
 The results array should list up to 5 of the most relevant posts you used when creating the summary, so they can be shown as sources under the answer.";
 
         $user_message  = "User search query: {$user_query}\n\n";
-        $user_message .= "Here are the posts from the site (with newer posts listed first where possible):\n\n{$posts_text}";
+        $user_message .= "Here are the most relevant posts from the site, with newer posts preferred when relevance is similar:\n\n{$posts_text}";
 
         $supports_response_format = (
             strpos( $model, 'gpt-4o' ) === 0 ||
