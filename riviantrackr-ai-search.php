@@ -3,7 +3,7 @@
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add an OpenAI powered AI summary to WordPress search on RivianTrackr.com without delaying normal results, with analytics, cache control, and collapsible sources.
- * Version: 3.1.7
+ * Version: 3.1.8
  * Author URI: https://riviantrackr.com
  * Author: RivianTrackr
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ class RivianTrackr_AI_Search {
     private $option_name         = 'rt_ai_search_options';
     private $models_cache_option = 'rt_ai_search_models_cache';
     private $cache_keys_option   = 'rt_ai_search_cache_keys';
-    private $cache_prefix        = 'rt_ai_search_v3_1_7_';
+    private $cache_prefix        = 'rt_ai_search_v3_1_8_';
     private $cache_ttl           = 3600;
 
     private $logs_table_checked = false;
@@ -147,7 +147,7 @@ class RivianTrackr_AI_Search {
     public function get_options() {
         $defaults = array(
             'api_key'              => '',
-            'model'                => 'gpt-4o-mini',
+            'model'                => 'gpt-4.1-mini',
             'max_posts'            => 6,
             'enable'               => 0,
             'max_calls_per_minute' => 30,
@@ -1569,7 +1569,6 @@ The results array should list up to 5 of the most relevant posts you used when c
             ),
         );
 
-        // GPT-5 models reject non default temperature values, so only set temperature for non GPT-5 models
         if ( strpos( $model, 'gpt-5' ) !== 0 ) {
             $body['temperature'] = 0.2;
         }
