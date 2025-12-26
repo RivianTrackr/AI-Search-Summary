@@ -3,7 +3,7 @@
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add an OpenAI powered AI summary to WordPress search on RivianTrackr.com without delaying normal results, with analytics, cache control, and collapsible sources.
- * Version: 3.1.4
+ * Version: 3.1.5
  * Author URI: https://riviantrackr.com
  * Author: RivianTrackr
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ class RivianTrackr_AI_Search {
     private $option_name         = 'rt_ai_search_options';
     private $models_cache_option = 'rt_ai_search_models_cache';
     private $cache_keys_option   = 'rt_ai_search_cache_keys';
-    private $cache_prefix        = 'rt_ai_search_v3_1_4_';
+    private $cache_prefix        = 'rt_ai_search_v3_1_5_';
     private $cache_ttl           = 3600;
 
     private $logs_table_checked = false;
@@ -142,6 +142,7 @@ class RivianTrackr_AI_Search {
             'enable'               => 0,
             'max_calls_per_minute' => 30,
             'cache_ttl'            => 3600,
+            'debug_mode'           => 0,
         );
 
         $opts = get_option( $this->option_name, array() );
@@ -171,6 +172,8 @@ class RivianTrackr_AI_Search {
         } else {
             $output['cache_ttl'] = 3600;
         }
+
+        $output['debug_mode'] = ! empty( $input['debug_mode'] ) ? 1 : 0;
 
         return $output;
     }
@@ -269,6 +272,14 @@ class RivianTrackr_AI_Search {
             'rt-ai-search',
             'rt_ai_search_main'
         );
+
+        add_settings_field(
+            'debug_mode',
+            'Debug mode',
+            array( $this, 'field_debug_mode' ),
+            'rt-ai-search',
+            'rt_ai_search_main'
+        );
     }
 
     public function field_api_key() {
@@ -356,6 +367,20 @@ class RivianTrackr_AI_Search {
                style="width: 100px;" />
         <p class="description">
             How long to cache each AI summary in seconds. Minimum 60 seconds, maximum 86400 seconds (24 hours).
+        </p>
+        <?php
+    }
+
+    public function field_debug_mode() {
+        $options = $this->get_options();
+        ?>
+        <label>
+            <input type="checkbox" name="<?php echo esc_attr( $this->option_name ); ?>[debug_mode]"
+                   value="1" <?php checked( (int) $options['debug_mode'], 1 ); ?> />
+            Show detailed AI errors to admins (manage_options) only
+        </label>
+        <p class="description">
+            When enabled, admins will see the real error message instead of the generic “AI summary is not available right now.”
         </p>
         <?php
     }
@@ -686,19 +711,15 @@ class RivianTrackr_AI_Search {
         $error_count    = $totals ? (int) $totals->error_count : 0;
         $success_rate   = $total_searches > 0 ? round( ( $success_count / $total_searches ) * 100 ) : 0;
 
-        $no_results_count = $wpdb->get_var(
-            "SELECT COUNT(*) FROM $table_name WHERE results_count = 0"
-        );
-        $no_results_count = (int) $no_results_count;
+        $no_results_count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table_name WHERE results_count = 0" );
 
         $since_24h = gmdate( 'Y-m-d H:i:s', time() - 24 * 60 * 60 );
-        $last_24   = $wpdb->get_var(
+        $last_24   = (int) $wpdb->get_var(
             $wpdb->prepare(
                 "SELECT COUNT(*) FROM $table_name WHERE created_at >= %s",
                 $since_24h
             )
         );
-        $last_24 = (int) $last_24;
 
         $daily_stats = $wpdb->get_results(
             "SELECT 
@@ -739,33 +760,23 @@ class RivianTrackr_AI_Search {
         <h2>Overview</h2>
         <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem;">
             <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">
-                    Total AI searches
-                </h3>
+                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Total AI searches</h3>
                 <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $total_searches ); ?></p>
             </div>
             <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">
-                    Overall success rate
-                </h3>
+                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Overall success rate</h3>
                 <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $success_rate ); ?>%</p>
             </div>
             <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">
-                    Searches last 24 hours
-                </h3>
+                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Searches last 24 hours</h3>
                 <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $last_24 ); ?></p>
             </div>
             <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">
-                    Total AI errors
-                </h3>
+                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Total AI errors</h3>
                 <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $error_count ); ?></p>
             </div>
             <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">
-                    Searches with no results
-                </h3>
+                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Searches with no results</h3>
                 <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $no_results_count ); ?></p>
             </div>
         </div>
@@ -933,13 +944,12 @@ class RivianTrackr_AI_Search {
         $success_rate   = $total_searches > 0 ? round( ( $success_count / $total_searches ) * 100 ) : 0;
 
         $since_24h = gmdate( 'Y-m-d H:i:s', time() - 24 * 60 * 60 );
-        $last_24   = $wpdb->get_var(
+        $last_24   = (int) $wpdb->get_var(
             $wpdb->prepare(
                 "SELECT COUNT(*) FROM $table_name WHERE created_at >= %s",
                 $since_24h
             )
         );
-        $last_24 = (int) $last_24;
 
         $top_queries = $wpdb->get_results(
             "SELECT search_query, COUNT(*) AS total, SUM(ai_success) AS success_count
@@ -950,9 +960,7 @@ class RivianTrackr_AI_Search {
         );
         ?>
         <div style="font-size:13px; line-height:1.5;">
-            <p style="margin-top:0;">
-                Quick snapshot of how often visitors are using AI search on RivianTrackr.
-            </p>
+            <p style="margin-top:0;">Quick snapshot of how often visitors are using AI search on RivianTrackr.</p>
 
             <ul style="margin:0 0 1rem 1.2rem; padding:0;">
                 <li>Total AI searches: <?php echo esc_html( $total_searches ); ?></li>
@@ -960,9 +968,7 @@ class RivianTrackr_AI_Search {
                 <li>Searches in the last 24 hours: <?php echo esc_html( $last_24 ); ?></li>
             </ul>
 
-            <h4 style="margin:0 0 0.4rem 0; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; opacity:0.7;">
-                Top queries
-            </h4>
+            <h4 style="margin:0 0 0.4rem 0; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; opacity:0.7;">Top queries</h4>
 
             <?php if ( ! empty( $top_queries ) ) : ?>
                 <table class="widefat striped" style="margin-top:0; font-size:12px;">
@@ -992,9 +998,7 @@ class RivianTrackr_AI_Search {
                 <p style="margin-top:0.3rem;">No searches logged yet.</p>
             <?php endif; ?>
 
-            <p style="margin-top:0.8rem; font-size:11px; opacity:0.7;">
-                For more detail, go to AI Search in the sidebar and click Analytics.
-            </p>
+            <p style="margin-top:0.8rem; font-size:11px; opacity:0.7;">For more detail, go to AI Search in the sidebar and click Analytics.</p>
         </div>
         <?php
     }
@@ -1049,20 +1053,43 @@ class RivianTrackr_AI_Search {
             @keyframes rt-ai-spin { to { transform: rotate(360deg); } }
 
             .rt-ai-search-summary-content { display:flex; align-items:center; gap:0.5rem; margin-top:0.75rem; }
-            .rt-ai-spinner { width:14px; height:14px; border-radius:50%; border:2px solid rgba(148,163,184,0.5); border-top-color:#22c55e; display:inline-block; animation:rt-ai-spin 0.7s linear infinite; flex-shrink:0; }
+            .rt-ai-spinner {
+                width:14px; height:14px; border-radius:50%;
+                border:2px solid rgba(148,163,184,0.5);
+                border-top-color:#22c55e;
+                display:inline-block; animation:rt-ai-spin 0.7s linear infinite; flex-shrink:0;
+            }
             .rt-ai-loading-text { margin:0; opacity:0.8; }
 
             .rt-ai-search-summary-content.rt-ai-loaded { display:block; }
             .rt-ai-search-summary-content.rt-ai-loaded > * { display:block; width:100%; max-width:100%; margin-bottom:0.75rem; }
             .rt-ai-search-summary-content.rt-ai-loaded > *:last-child { margin-bottom:0; }
 
-            .rt-ai-openai-badge { display:inline-flex; align-items:center; gap:0.35rem; padding:0.15rem 0.55rem; border-radius:999px; border:1px solid rgba(148,163,184,0.5); background:rgba(15,23,42,0.9); font-size:0.7rem; text-transform:uppercase; letter-spacing:0.08em; white-space:nowrap; opacity:0.95; }
-            .rt-ai-openai-mark { width:10px; height:10px; border-radius:999px; border:1px solid rgba(148,163,184,0.8); position:relative; flex-shrink:0; }
-            .rt-ai-openai-mark::after { content:''; position:absolute; inset:2px; border-radius:999px; background:linear-gradient(135deg,#22c55e,#3b82f6); }
+            .rt-ai-openai-badge {
+                display:inline-flex; align-items:center; gap:0.35rem;
+                padding:0.15rem 0.55rem; border-radius:999px;
+                border:1px solid rgba(148,163,184,0.5);
+                background:rgba(15,23,42,0.9);
+                font-size:0.7rem; text-transform:uppercase; letter-spacing:0.08em;
+                white-space:nowrap; opacity:0.95;
+            }
+            .rt-ai-openai-mark {
+                width:10px; height:10px; border-radius:999px;
+                border:1px solid rgba(148,163,184,0.8);
+                position:relative; flex-shrink:0;
+            }
+            .rt-ai-openai-mark::after {
+                content:''; position:absolute; inset:2px; border-radius:999px;
+                background:linear-gradient(135deg,#22c55e,#3b82f6);
+            }
             .rt-ai-openai-text { opacity:0.9; }
 
             .rt-ai-sources { margin-top:1rem; font-size:0.85rem; }
-            .rt-ai-sources-toggle { border:none; background:none; padding:0; margin:0 0 0.4rem 0; font-size:0.85rem; cursor:pointer; text-decoration:underline; text-underline-offset:2px; opacity:0.95; color:#e5e7eb; }
+            .rt-ai-sources-toggle {
+                border:none; background:none; padding:0; margin:0 0 0.4rem 0;
+                font-size:0.85rem; cursor:pointer; text-decoration:underline;
+                text-underline-offset:2px; opacity:0.95; color:#e5e7eb;
+            }
             .rt-ai-sources-toggle:hover { opacity:1; }
             .rt-ai-sources-list { margin:0; padding-left:1.1rem; font-size:0.85rem; }
             .rt-ai-sources-list li { margin-bottom:0.4rem; }
@@ -1088,14 +1115,9 @@ class RivianTrackr_AI_Search {
 
             var endpoint = '<?php echo $rest_url; ?>' + '?q=' + encodeURIComponent(q);
 
-            var headers = {};
-            if (window.wpApiSettings && window.wpApiSettings.nonce) {
-                headers['X-WP-Nonce'] = window.wpApiSettings.nonce;
-            }
-
-            fetch(endpoint, { credentials: 'same-origin', headers: headers })
+            fetch(endpoint, { credentials: 'same-origin' })
                 .then(function(response) {
-                    if (!response.ok) { throw new Error('Network response was not ok'); }
+                    if (!response.ok) throw new Error('Network response was not ok');
                     return response.json();
                 })
                 .then(function(data) {
@@ -1151,7 +1173,7 @@ class RivianTrackr_AI_Search {
             array(
                 'methods'             => 'GET',
                 'callback'            => array( $this, 'rest_get_summary' ),
-                'permission_callback' => array( $this, 'rest_permission_check' ),
+                'permission_callback' => '__return_true',
                 'args'                => array(
                     'q' => array(
                         'required'          => true,
@@ -1162,62 +1184,38 @@ class RivianTrackr_AI_Search {
         );
     }
 
-    public function rest_permission_check( WP_REST_Request $request ) {
-        // Logged in users: allow (nonce header may or may not exist depending on context)
-        if ( is_user_logged_in() ) {
-            $nonce = (string) $request->get_header( 'x_wp_nonce' );
-            if ( $nonce ) {
-                if ( wp_verify_nonce( $nonce, 'wp_rest' ) ) {
-                    return true;
-                }
-                // If a nonce is present but invalid, block to avoid weird edge cases
-                return new WP_Error( 'forbidden', 'Forbidden', array( 'status' => 403 ) );
-            }
-            return true;
-        }
-
-        // Logged out users: require same-origin Origin or Referer
-        $origin  = (string) $request->get_header( 'origin' );
-        $referer = (string) $request->get_header( 'referer' );
-
-        $site_host = wp_parse_url( home_url(), PHP_URL_HOST );
-
-        $origin_host  = $origin ? wp_parse_url( $origin, PHP_URL_HOST ) : '';
-        $referer_host = $referer ? wp_parse_url( $referer, PHP_URL_HOST ) : '';
-
-        if ( $origin_host && $origin_host === $site_host ) {
-            return true;
-        }
-
-        if ( $referer_host && $referer_host === $site_host ) {
-            return true;
-        }
-
-        return new WP_Error( 'forbidden', 'Forbidden', array( 'status' => 403 ) );
+    private function should_show_debug_errors() {
+        $options = $this->get_options();
+        return ( ! empty( $options['debug_mode'] ) && current_user_can( 'manage_options' ) );
     }
 
     public function rest_get_summary( WP_REST_Request $request ) {
         $options = $this->get_options();
 
+        $is_admin_debug = $this->should_show_debug_errors();
+        $generic_error  = 'AI summary is not available right now.';
+
         if ( empty( $options['enable'] ) || empty( $options['api_key'] ) ) {
-            $this->log_search_event( $request->get_param( 'q' ), 0, 0, 'AI search not enabled or API key missing' );
+            $msg = 'AI search not enabled or API key missing';
+            $this->log_search_event( $request->get_param( 'q' ), 0, 0, $msg );
 
             return rest_ensure_response(
                 array(
                     'answer_html' => '',
-                    'error'       => 'AI search is not enabled.',
+                    'error'       => $is_admin_debug ? $msg : $generic_error,
                 )
             );
         }
 
         $search_query = $request->get_param( 'q' );
         if ( ! $search_query ) {
-            $this->log_search_event( '', 0, 0, 'Missing search query' );
+            $msg = 'Missing search query';
+            $this->log_search_event( '', 0, 0, $msg );
 
             return rest_ensure_response(
                 array(
                     'answer_html' => '',
-                    'error'       => 'Missing search query.',
+                    'error'       => $is_admin_debug ? $msg : $generic_error,
                 )
             );
         }
@@ -1228,7 +1226,6 @@ class RivianTrackr_AI_Search {
         }
 
         $post_type = 'any';
-
         $posts_for_ai = array();
         $used_ids     = array();
 
@@ -1342,12 +1339,13 @@ class RivianTrackr_AI_Search {
         $ai_data       = $this->get_ai_data_for_search( $search_query, $posts_for_ai, $ai_error );
 
         if ( ! $ai_data ) {
-            $this->log_search_event( $search_query, $results_count, 0, $ai_error ? $ai_error : 'AI summary not available' );
+            $msg = $ai_error ? $ai_error : 'AI summary not available';
+            $this->log_search_event( $search_query, $results_count, 0, $msg );
 
             return rest_ensure_response(
                 array(
                     'answer_html' => '',
-                    'error'       => $ai_error ? $ai_error : 'AI summary is not available right now.',
+                    'error'       => $is_admin_debug ? $msg : $generic_error,
                 )
             );
         }
@@ -1358,16 +1356,16 @@ class RivianTrackr_AI_Search {
         $sources     = isset( $ai_data['results'] ) && is_array( $ai_data['results'] ) ? $ai_data['results'] : array();
 
         $allowed_tags = array(
-            'p'      => array(),
-            'br'     => array(),
+            'p'  => array(),
+            'br' => array(),
             'strong' => array(),
-            'em'     => array(),
-            'ul'     => array(),
-            'ol'     => array(),
-            'li'     => array(),
-            'h3'     => array(),
-            'h4'     => array(),
-            'a'      => array(
+            'em' => array(),
+            'ul' => array(),
+            'ol' => array(),
+            'li' => array(),
+            'h3' => array(),
+            'h4' => array(),
+            'a'  => array(
                 'href'   => array(),
                 'title'  => array(),
                 'target' => array(),
