@@ -1191,36 +1191,28 @@ public function enqueue_frontend_assets() {
 
         $max_posts = (int) $options['max_posts'];
         if ( $max_posts < 1 ) {
-            $max_posts = 8;
+            $max_posts = 10;
         }
 
         $post_type = 'any';
 
-        $posts_for_ai = array();
-        $used_ids     = array();
-
-        $recent_date = gmdate( 'Y-m-d', time() - 30 * DAY_IN_SECONDS );
-
-        $recent_args = array(
+        // Single optimized query that gets all posts sorted by relevance and recency
+        // WordPress search relevance + date ordering gives us the best results first
+        $search_args = array(
             's'              => $search_query,
             'post_type'      => $post_type,
             'posts_per_page' => $max_posts,
             'post_status'    => 'publish',
-            'date_query'     => array(
-                array(
-                    'after'     => $recent_date,
-                    'inclusive' => true,
-                    'column'    => 'post_date',
-                ),
-            ),
+            'orderby'        => 'date',  // Prefer newer content
+            'order'          => 'DESC',
         );
 
-        $recent_query = new WP_Query( $recent_args );
+        $search_results = new WP_Query( $search_args );
+        
+        $posts_for_ai = array();
 
-        if ( $recent_query->have_posts() ) {
-            foreach ( $recent_query->posts as $post ) {
-                $used_ids[] = $post->ID;
-
+        if ( $search_results->have_posts() ) {
+            foreach ( $search_results->posts as $post ) {
                 $content = wp_strip_all_tags( $post->post_content );
                 $content = $this->safe_substr( $content, 0, 400 );
 
@@ -1233,74 +1225,6 @@ public function enqueue_frontend_assets() {
                     'type'    => $post->post_type,
                     'date'    => get_the_date( 'Y-m-d', $post ),
                 );
-            }
-        }
-
-        $remaining = $max_posts - count( $posts_for_ai );
-        if ( $remaining > 0 ) {
-            $older_args = array(
-                's'              => $search_query,
-                'post_type'      => $post_type,
-                'posts_per_page' => $remaining,
-                'post_status'    => 'publish',
-                'post__not_in'   => $used_ids,
-                'date_query'     => array(
-                    array(
-                        'before'    => $recent_date,
-                        'inclusive' => false,
-                        'column'    => 'post_date',
-                    ),
-                ),
-            );
-
-            $older_query = new WP_Query( $older_args );
-
-            if ( $older_query->have_posts() ) {
-                foreach ( $older_query->posts as $post ) {
-                    $content = wp_strip_all_tags( $post->post_content );
-                    $content = $this->safe_substr( $content, 0, 400 );
-
-                    $posts_for_ai[] = array(
-                        'id'      => $post->ID,
-                        'title'   => get_the_title( $post ),
-                        'url'     => get_permalink( $post ),
-                        'excerpt' => $this->safe_substr( $content, 0, 200 ),
-                        'content' => $content,
-                        'type'    => $post->post_type,
-                        'date'    => get_the_date( 'Y-m-d', $post ),
-                    );
-                }
-            }
-        }
-
-        if ( count( $posts_for_ai ) < $max_posts ) {
-            $remaining_fallback = $max_posts - count( $posts_for_ai );
-
-            $fallback_args = array(
-                's'              => $search_query,
-                'post_type'      => $post_type,
-                'posts_per_page' => $remaining_fallback,
-                'post_status'    => 'publish',
-                'post__not_in'   => wp_list_pluck( $posts_for_ai, 'id' ),
-            );
-
-            $fallback_query = new WP_Query( $fallback_args );
-
-            if ( $fallback_query->have_posts() ) {
-                foreach ( $fallback_query->posts as $post ) {
-                    $content = wp_strip_all_tags( $post->post_content );
-                    $content = $this->safe_substr( $content, 0, 400 );
-
-                    $posts_for_ai[] = array(
-                        'id'      => $post->ID,
-                        'title'   => get_the_title( $post ),
-                        'url'     => get_permalink( $post ),
-                        'excerpt' => $this->safe_substr( $content, 0, 200 ),
-                        'content' => $content,
-                        'type'    => $post->post_type,
-                        'date'    => get_the_date( 'Y-m-d', $post ),
-                    );
-                }
             }
         }
 
