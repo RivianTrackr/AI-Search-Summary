@@ -9,6 +9,8 @@
  * License: GPL v2 or later
  */
 
+define( 'RT_AI_SEARCH_VERSION', '3.2.0' );
+
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
@@ -18,13 +20,15 @@ class RivianTrackr_AI_Search {
     private $option_name         = 'rt_ai_search_options';
     private $models_cache_option = 'rt_ai_search_models_cache';
     private $cache_keys_option   = 'rt_ai_search_cache_keys';
-    private $cache_prefix        = 'rt_ai_search_v3_2_0_';
+    private $cache_prefix;
     private $cache_ttl           = 3600;
 
     private $logs_table_checked = false;
     private $logs_table_exists  = false;
 
     public function __construct() {
+        
+        $this->cache_prefix = 'rt_ai_search_v' . str_replace( '.', '_', RT_AI_SEARCH_VERSION ) . '_';
         add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
         add_action( 'admin_init', array( $this, 'register_settings' ) );
         add_action( 'wp_dashboard_setup', array( $this, 'register_dashboard_widget' ) );
@@ -163,8 +167,8 @@ class RivianTrackr_AI_Search {
         $output = array();
 
         $output['api_key']   = isset( $input['api_key'] ) ? trim( $input['api_key'] ) : '';
-        $output['model']     = isset( $input['model'] ) ? sanitize_text_field( $input['model'] ) : 'gpt-4o-mini';
-        $output['max_posts'] = isset( $input['max_posts'] ) ? max( 1, intval( $input['max_posts'] ) ) : 8;
+        $output['model']     = isset( $input['model'] ) ? sanitize_text_field( $input['model'] ) : 'gpt-4.1-mini';
+        $output['max_posts'] = isset( $input['max_posts'] ) ? max( 1, intval( $input['max_posts'] ) ) : 6;
         $output['enable']    = ! empty( $input['enable'] ) ? 1 : 0;
 
         $output['max_calls_per_minute'] = isset( $input['max_calls_per_minute'] )
@@ -443,7 +447,7 @@ class RivianTrackr_AI_Search {
             'gpt-4.1',
             'gpt-4.1-mini',
             'gpt-4o',
-            'gpt-4o-mini',
+            'gpt-4.1-mini',
             'gpt-3.5-turbo',
         );
 
@@ -1005,7 +1009,7 @@ public function enqueue_frontend_assets() {
         return;
     }
 
-    $version = '3.2.0';
+    $version = RT_AI_SEARCH_VERSION;
 
     wp_enqueue_style(
         'rt-ai-search',
