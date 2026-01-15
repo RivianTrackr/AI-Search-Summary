@@ -13,6 +13,22 @@ declare(strict_types=1);
 define( 'RT_AI_SEARCH_VERSION', '3.3.0' );
 define( 'RT_AI_SEARCH_MODELS_CACHE_TTL', 7 * DAY_IN_SECONDS );
 
+// Cache settings
+define( 'RT_AI_SEARCH_MIN_CACHE_TTL', 60 );
+define( 'RT_AI_SEARCH_MAX_CACHE_TTL', 86400 );
+define( 'RT_AI_SEARCH_DEFAULT_CACHE_TTL', 3600 );
+
+// Content length limits
+define( 'RT_AI_SEARCH_CONTENT_LENGTH', 400 );
+define( 'RT_AI_SEARCH_EXCERPT_LENGTH', 200 );
+
+// Display limits
+define( 'RT_AI_SEARCH_MAX_SOURCES_DISPLAY', 5 );
+
+// API settings
+define( 'RT_AI_SEARCH_API_TIMEOUT', 60 );
+define( 'RT_AI_SEARCH_RATE_LIMIT_WINDOW', 70 );
+
 
 if ( ! defined( 'ABSPATH' ) ) {
     exit;
@@ -152,10 +168,7 @@ class RivianTrackr_AI_Search {
         }
     }
 
-    /* ---------------------------------------------------------
-     *  Options and settings
-     * --------------------------------------------------------- */
-
+    // Update get_options() to use constant
     public function get_options() {
         if ( is_array( $this->options_cache ) ) {
             return $this->options_cache;
@@ -167,7 +180,7 @@ class RivianTrackr_AI_Search {
             'max_posts'            => 10,
             'enable'               => 0,
             'max_calls_per_minute' => 30,
-            'cache_ttl'            => 3600,
+            'cache_ttl'            => RT_AI_SEARCH_DEFAULT_CACHE_TTL,
         );
 
         $opts = get_option( $this->option_name, array() );
@@ -176,12 +189,13 @@ class RivianTrackr_AI_Search {
         return $this->options_cache;
     }
 
+    // Update sanitize_options() to use constants
     public function sanitize_options( $input ) {
         $output = array();
 
         $output['api_key']   = isset( $input['api_key'] ) ? trim( $input['api_key'] ) : '';
         $output['model']     = isset( $input['model'] ) ? sanitize_text_field( $input['model'] ) : 'gpt-4.1-mini';
-        $output['max_posts'] = isset( $input['max_posts'] ) ? max( 1, intval( $input['max_posts'] ) ) : 6;
+        $output['max_posts'] = isset( $input['max_posts'] ) ? max( 1, intval( $input['max_posts'] ) ) : 10;
         $output['enable']    = ! empty( $input['enable'] ) ? 1 : 0;
 
         $output['max_calls_per_minute'] = isset( $input['max_calls_per_minute'] )
@@ -190,14 +204,14 @@ class RivianTrackr_AI_Search {
 
         if ( isset( $input['cache_ttl'] ) ) {
             $ttl = intval( $input['cache_ttl'] );
-            if ( $ttl < 60 ) {
-                $ttl = 60;
-            } elseif ( $ttl > 86400 ) {
-                $ttl = 86400;
+            if ( $ttl < RT_AI_SEARCH_MIN_CACHE_TTL ) {
+                $ttl = RT_AI_SEARCH_MIN_CACHE_TTL;
+            } elseif ( $ttl > RT_AI_SEARCH_MAX_CACHE_TTL ) {
+                $ttl = RT_AI_SEARCH_MAX_CACHE_TTL;
             }
             $output['cache_ttl'] = $ttl;
         } else {
-            $output['cache_ttl'] = 3600;
+            $output['cache_ttl'] = RT_AI_SEARCH_DEFAULT_CACHE_TTL;
         }
 
         $this->options_cache = null;
@@ -376,19 +390,22 @@ class RivianTrackr_AI_Search {
         <?php
     }
 
+    // Update field_cache_ttl() to use constants
     public function field_cache_ttl() {
         $options = $this->get_options();
-        $value   = isset( $options['cache_ttl'] ) ? (int) $options['cache_ttl'] : 3600;
+        $value   = isset( $options['cache_ttl'] ) ? (int) $options['cache_ttl'] : RT_AI_SEARCH_DEFAULT_CACHE_TTL;
         ?>
         <input type="number"
                name="<?php echo esc_attr( $this->option_name ); ?>[cache_ttl]"
                value="<?php echo esc_attr( $value ); ?>"
-               min="60"
-               max="86400"
+               min="<?php echo RT_AI_SEARCH_MIN_CACHE_TTL; ?>"
+               max="<?php echo RT_AI_SEARCH_MAX_CACHE_TTL; ?>"
                step="60"
                style="width: 100px;" />
         <p class="description">
-            How long to cache each AI summary in seconds. Minimum 60 seconds, maximum 86400 seconds (24 hours).
+            How long to cache each AI summary in seconds. 
+            Minimum <?php echo RT_AI_SEARCH_MIN_CACHE_TTL; ?> seconds, 
+            maximum <?php echo number_format( RT_AI_SEARCH_MAX_CACHE_TTL ); ?> seconds (24 hours).
         </p>
         <?php
     }
@@ -1212,21 +1229,21 @@ public function enqueue_frontend_assets() {
         $posts_for_ai = array();
 
         if ( $search_results->have_posts() ) {
-            foreach ( $search_results->posts as $post ) {
-                $content = wp_strip_all_tags( $post->post_content );
-                $content = $this->safe_substr( $content, 0, 400 );
+                foreach ( $search_results->posts as $post ) {
+                    $content = wp_strip_all_tags( $post->post_content );
+                    $content = $this->safe_substr( $content, 0, RT_AI_SEARCH_CONTENT_LENGTH );
 
-                $posts_for_ai[] = array(
-                    'id'      => $post->ID,
-                    'title'   => get_the_title( $post ),
-                    'url'     => get_permalink( $post ),
-                    'excerpt' => $this->safe_substr( $content, 0, 200 ),
-                    'content' => $content,
-                    'type'    => $post->post_type,
-                    'date'    => get_the_date( 'Y-m-d', $post ),
-                );
+                    $posts_for_ai[] = array(
+                        'id'      => $post->ID,
+                        'title'   => get_the_title( $post ),
+                        'url'     => get_permalink( $post ),
+                        'excerpt' => $this->safe_substr( $content, 0, RT_AI_SEARCH_EXCERPT_LENGTH ),
+                        'content' => $content,
+                        'type'    => $post->post_type,
+                        'date'    => get_the_date( 'Y-m-d', $post ),
+                    );
+                }
             }
-        }
 
         $results_count = count( $posts_for_ai );
         $ai_error      = '';
@@ -1280,10 +1297,6 @@ public function enqueue_frontend_assets() {
         );
     }
 
-    /* ---------------------------------------------------------
-     *  API throttling helper
-     * --------------------------------------------------------- */
-
     private function is_rate_limited_for_ai_calls() {
         $options = $this->get_options();
         $limit   = isset( $options['max_calls_per_minute'] ) ? (int) $options['max_calls_per_minute'] : 0;
@@ -1300,7 +1313,7 @@ public function enqueue_frontend_assets() {
         }
 
         $count++;
-        set_transient( $key, $count, 70 );
+        set_transient( $key, $count, RT_AI_SEARCH_RATE_LIMIT_WINDOW );
 
         return false;
     }
@@ -1477,15 +1490,13 @@ The results array should list up to 5 of the most relevant posts you used when c
         }
 
         $args = array(
-            'headers' => array(
-                'Authorization' => 'Bearer ' . $api_key,
-                'Content-Type'  => 'application/json',
-            ),
-            'body'    => wp_json_encode( $body ),
-
-            // Bumped timeout to reduce cURL error 28 on slower models and larger prompts
-            'timeout' => 60,
-        );
+                'headers' => array(
+                    'Authorization' => 'Bearer ' . $api_key,
+                    'Content-Type'  => 'application/json',
+                ),
+                'body'    => wp_json_encode( $body ),
+                'timeout' => RT_AI_SEARCH_API_TIMEOUT,
+            );
 
         $response = wp_remote_post( $endpoint, $args );
 
@@ -1516,16 +1527,12 @@ The results array should list up to 5 of the most relevant posts you used when c
         return $decoded;
     }
 
-    /* ---------------------------------------------------------
-     *  Sources render
-     * --------------------------------------------------------- */
-
     private function render_sources_html( $sources ) {
         if ( empty( $sources ) || ! is_array( $sources ) ) {
             return '';
         }
 
-        $sources = array_slice( $sources, 0, 5 );
+        $sources = array_slice( $sources, 0, RT_AI_SEARCH_MAX_SOURCES_DISPLAY );
         $count   = count( $sources );
 
         $show_label = 'Show sources (' . intval( $count ) . ')';
