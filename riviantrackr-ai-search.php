@@ -3,13 +3,13 @@
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add an OpenAI powered AI summary to WordPress search on RivianTrackr.com without delaying normal results, with analytics, cache control, and collapsible sources.
- * Version: 3.2.0
+ * Version: 3.2.1
  * Author URI: https://riviantrackr.com
  * Author: RivianTrackr
  * License: GPL v2 or later
  */
 
-define( 'RT_AI_SEARCH_VERSION', '3.2.0' );
+define( 'RT_AI_SEARCH_VERSION', '3.2.1' );
 define( 'RT_AI_SEARCH_MODELS_CACHE_TTL', 7 * DAY_IN_SECONDS );
 
 
@@ -119,14 +119,22 @@ class RivianTrackr_AI_Search {
 
         // Process in batches to avoid timeouts on large tables.
         $batch_size = 1000;
-        $offset     = 0;
+        $last_id    = 0;
+        $did_work   = false;
 
         while ( true ) {
+            // Only select IPs that look like IPv4 or IPv6 addresses to avoid re-hashing already anonymized values.
             $rows = $wpdb->get_results(
                 $wpdb->prepare(
-                    "SELECT id, ip FROM {$table_name} WHERE ip IS NOT NULL AND ip <> '' LIMIT %d OFFSET %d",
-                    $batch_size,
-                    $offset
+                    "SELECT id, ip
+                     FROM {$table_name}
+                     WHERE id > %d
+                       AND ip IS NOT NULL
+                       AND ip <> ''
+                     ORDER BY id ASC
+                     LIMIT %d",
+                    $last_id,
+                    $batch_size
                 )
             );
 
@@ -135,32 +143,40 @@ class RivianTrackr_AI_Search {
             }
 
             foreach ( $rows as $row ) {
-                $ip = (string) $row->ip;
+                $last_id = (int) $row->id;
 
-                // Only transform values that look like an IP address.
-                if ( strpos( $ip, '.' ) === false && strpos( $ip, ':' ) === false ) {
+                $ip = trim( (string) $row->ip );
+                if ( $ip === '' ) {
+                    continue;
+                }
+
+                // Skip values that do not look like IP addresses (likely already hashed).
+                if ( filter_var( $ip, FILTER_VALIDATE_IP ) === false ) {
                     continue;
                 }
 
                 $hashed = $this->hash_ip_for_analytics( $ip );
-                $wpdb->update(
+
+                $updated = $wpdb->update(
                     $table_name,
                     array( 'ip' => $hashed ),
-                    array( 'id' => (int) $row->id ),
+                    array( 'id' => $last_id ),
                     array( '%s' ),
                     array( '%d' )
                 );
+
+                if ( $updated !== false ) {
+                    $did_work = true;
+                }
             }
 
-            // If we got fewer than a full batch, we are done.
             if ( count( $rows ) < $batch_size ) {
                 break;
             }
-
-            $offset += $batch_size;
         }
 
-        return true;
+        // Return true if we successfully ran (even if there was nothing to anonymize).
+        return ( $did_work || true );
     }
 
     private function hash_ip_for_analytics( $ip ) {
