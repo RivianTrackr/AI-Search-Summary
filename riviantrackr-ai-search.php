@@ -665,41 +665,57 @@ class RivianTrackr_AI_Search {
         <?php
     }
 
-    /* ---------------------------------------------------------
-     *  Analytics page
-     * --------------------------------------------------------- */
-
     public function render_analytics_page() {
-    if ( ! current_user_can( 'manage_options' ) ) {
-        return;
+        if ( ! current_user_can( 'manage_options' ) ) {
+            return;
+        }
+
+        $logs_built      = false;
+        $logs_error      = '';
+
+        // Handle the create/repair action
+        if (
+            isset( $_GET['rt_ai_build_logs'] ) &&
+            $_GET['rt_ai_build_logs'] === '1' &&
+            isset( $_GET['_wpnonce'] ) &&
+            wp_verify_nonce( $_GET['_wpnonce'], 'rt_ai_build_logs' )
+        ) {
+            $logs_built = $this->ensure_logs_table();
+            if ( ! $logs_built ) {
+                $logs_error = 'Could not create or repair the analytics table. Check error logs for details.';
+            }
+        }
+
+        // Create the URL for the create/repair button
+        $logs_url = wp_nonce_url(
+            admin_url( 'admin.php?page=rt-ai-search-analytics&rt_ai_build_logs=1' ),
+            'rt_ai_build_logs'
+        );
+
+        ?>
+        <div class="wrap">
+            <h1>AI Search Analytics</h1>
+
+            <?php if ( $logs_built && empty( $logs_error ) ) : ?>
+                <div class="updated notice">
+                    <p>Analytics table has been created or repaired successfully.</p>
+                </div>
+            <?php elseif ( ! empty( $logs_error ) ) : ?>
+                <div class="error notice">
+                    <p><?php echo esc_html( $logs_error ); ?></p>
+                </div>
+            <?php endif; ?>
+
+            <p style="margin-bottom:1rem;">
+                <a href="<?php echo esc_url( $logs_url ); ?>" class="button">
+                    Create or repair analytics table
+                </a>
+            </p>
+
+            <?php $this->render_analytics_section(); ?>
+        </div>
+        <?php
     }
-
-    $logs_built      = false;
-    $logs_error      = '';
-    ?>
-    <div class="wrap">
-        <h1>AI Search Analytics</h1>
-
-        <?php if ( $logs_built && empty( $logs_error ) ) : ?>
-            <div class="updated notice">
-                <p>Analytics table has been created or repaired successfully.</p>
-            </div>
-        <?php elseif ( ! empty( $logs_error ) ) : ?>
-            <div class="error notice">
-                <p><?php echo esc_html( $logs_error ); ?></p>
-            </div>
-        <?php endif; ?>
-
-        <p style="margin-bottom:1rem;">
-            <a href="<?php echo esc_url( $logs_url ); ?>" class="button">
-                Create or repair analytics table
-            </a>
-        </p>
-
-        <?php $this->render_analytics_section(); ?>
-    </div>
-    <?php
-}
 
     private function render_analytics_section() {
         if ( ! $this->logs_table_is_available() ) {
