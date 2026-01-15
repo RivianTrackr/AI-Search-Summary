@@ -101,11 +101,8 @@ class RivianTrackr_AI_Search {
 
         $result = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
 
-        if ( $result !== $table_name ) {
-            self::create_logs_table();
-            $result = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
-        }
-
+        // Do not attempt to create or repair tables during normal requests.
+        // Table creation is handled on plugin activation and via the explicit admin action.
         $this->logs_table_checked = true;
         $this->logs_table_exists  = ( $result === $table_name );
 
