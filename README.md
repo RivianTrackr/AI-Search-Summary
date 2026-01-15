@@ -19,17 +19,6 @@ Add an AI-powered search summary to WordPress search results on [RivianTrackr.co
 - 🎯 **WordPress Native** - Follows WordPress coding standards and best practices
 - 🔒 **Security First** - Nonce verification, capability checks, SQL injection prevention
 
-## 📸 Screenshots
-
-### AI Search Summary
-*AI-generated summary appears above search results with collapsible sources*
-
-### Settings Page
-*Configure API key, model, cache settings, and rate limits*
-
-### Analytics Dashboard
-*Track search queries, success rates, and identify trends*
-
 ## 🚀 Installation
 
 ### From GitHub
