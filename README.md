@@ -22,15 +22,12 @@ Add an AI-powered search summary to WordPress search results on [RivianTrackr.co
 ## 📸 Screenshots
 
 ### AI Search Summary
-![AI Search Summary]
 *AI-generated summary appears above search results with collapsible sources*
 
 ### Settings Page
-![Settings Page]
 *Configure API key, model, cache settings, and rate limits*
 
 ### Analytics Dashboard
-![Analytics]
 *Track search queries, success rates, and identify trends*
 
 ## 🚀 Installation
