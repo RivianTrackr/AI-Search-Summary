@@ -3,13 +3,13 @@
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add an OpenAI powered AI summary to WordPress search on RivianTrackr.com without delaying normal results, with analytics, cache control, and collapsible sources.
- * Version: 3.2.2
+ * Version: 3.2.3
  * Author URI: https://riviantrackr.com
  * Author: RivianTrackr
  * License: GPL v2 or later
  */
 
-define( 'RT_AI_SEARCH_VERSION', '3.2.2' );
+define( 'RT_AI_SEARCH_VERSION', '3.2.3' );
 define( 'RT_AI_SEARCH_MODELS_CACHE_TTL', 7 * DAY_IN_SECONDS );
 
 
@@ -109,102 +109,6 @@ class RivianTrackr_AI_Search {
         return $this->logs_table_exists;
     }
 
-    private function anonymize_existing_ips() {
-        if ( ! $this->logs_table_is_available() ) {
-            return false;
-        }
-
-        global $wpdb;
-        $table_name = self::get_logs_table_name();
-
-        // Process in batches to avoid timeouts on large tables.
-        $batch_size = 1000;
-        $last_id    = 0;
-        $did_work   = false;
-
-        while ( true ) {
-            // Only select IPs that look like IPv4 or IPv6 addresses to avoid re-hashing already anonymized values.
-            $rows = $wpdb->get_results(
-                $wpdb->prepare(
-                    "SELECT id, ip
-                     FROM {$table_name}
-                     WHERE id > %d
-                       AND ip IS NOT NULL
-                       AND ip <> ''
-                     ORDER BY id ASC
-                     LIMIT %d",
-                    $last_id,
-                    $batch_size
-                )
-            );
-
-            if ( empty( $rows ) ) {
-                break;
-            }
-
-            foreach ( $rows as $row ) {
-                $last_id = (int) $row->id;
-
-                $ip = trim( (string) $row->ip );
-                if ( $ip === '' ) {
-                    continue;
-                }
-
-                // Skip values that do not look like IP addresses (likely already hashed).
-                if ( filter_var( $ip, FILTER_VALIDATE_IP ) === false ) {
-                    continue;
-                }
-
-                $hashed = $this->hash_ip_for_analytics( $ip );
-
-                $updated = $wpdb->update(
-                    $table_name,
-                    array( 'ip' => $hashed ),
-                    array( 'id' => $last_id ),
-                    array( '%s' ),
-                    array( '%d' )
-                );
-
-                if ( $updated !== false ) {
-                    $did_work = true;
-                }
-            }
-
-            if ( count( $rows ) < $batch_size ) {
-                break;
-            }
-        }
-
-        // Return true if we successfully ran (even if there was nothing to anonymize).
-        return ( $did_work || true );
-    }
-
-    private function hash_ip_for_analytics( $ip ) {
-        $ip = trim( (string) $ip );
-        if ( $ip === '' ) {
-            return '';
-        }
-
-        // Use a salted one way hash that fits within the logs table varchar(45) column.
-        $salt = wp_salt( 'auth' );
-        return sha1( $salt . '|' . $ip );
-    }
-
-    private function get_ip_value_for_logging() {
-        $raw_ip = isset( $_SERVER['REMOTE_ADDR'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ) ) : '';
-        $opts   = $this->get_options();
-        $mode   = isset( $opts['ip_storage'] ) ? $opts['ip_storage'] : 'hashed';
-
-        if ( $mode === 'off' ) {
-            return '';
-        }
-        if ( $mode === 'raw' ) {
-            return $raw_ip;
-        }
-
-        return $this->hash_ip_for_analytics( $raw_ip );
-    }
-
     private function log_search_event( $search_query, $results_count, $ai_success, $ai_error = '' ) {
         if ( empty( $search_query ) ) {
             return;
@@ -217,7 +121,6 @@ class RivianTrackr_AI_Search {
         global $wpdb;
         $table_name = self::get_logs_table_name();
 
-        $ip  = $this->get_ip_value_for_logging();
         $now = current_time( 'mysql' );
 
         $wpdb->insert(
@@ -228,7 +131,6 @@ class RivianTrackr_AI_Search {
                 'ai_success'    => $ai_success ? 1 : 0,
                 'ai_error'      => $ai_error,
                 'created_at'    => $now,
-                'ip'            => $ip,
             ),
             array(
                 '%s',
@@ -236,9 +138,9 @@ class RivianTrackr_AI_Search {
                 '%d',
                 '%s',
                 '%s',
-                '%s',
             )
         );
+
     }
 
     /* ---------------------------------------------------------
@@ -253,8 +155,7 @@ class RivianTrackr_AI_Search {
             'enable'               => 0,
             'max_calls_per_minute' => 30,
             'cache_ttl'            => 3600,
-            'ip_storage'           => 'hashed',
-        );
+);
 
         $opts = get_option( $this->option_name, array() );
         return wp_parse_args( $opts, $defaults );
@@ -283,11 +184,6 @@ class RivianTrackr_AI_Search {
         } else {
             $output['cache_ttl'] = 3600;
         }
-
-
-        $allowed_ip_storage = array( 'off', 'hashed', 'raw' );
-        $ip_storage         = isset( $input['ip_storage'] ) ? sanitize_text_field( $input['ip_storage'] ) : 'hashed';
-        $output['ip_storage'] = in_array( $ip_storage, $allowed_ip_storage, true ) ? $ip_storage : 'hashed';
 
         return $output;
     }
@@ -386,14 +282,6 @@ class RivianTrackr_AI_Search {
             'rt-ai-search',
             'rt_ai_search_main'
         );
-
-        add_settings_field(
-            'ip_storage',
-            'Analytics IP storage',
-            array( $this, 'field_ip_storage' ),
-            'rt-ai-search',
-            'rt_ai_search_main'
-        );
     }
 
     public function field_api_key() {
@@ -481,21 +369,6 @@ class RivianTrackr_AI_Search {
                style="width: 100px;" />
         <p class="description">
             How long to cache each AI summary in seconds. Minimum 60 seconds, maximum 86400 seconds (24 hours).
-        </p>
-        <?php
-    }
-
-    public function field_ip_storage() {
-        $options = $this->get_options();
-        $value   = isset( $options['ip_storage'] ) ? $options['ip_storage'] : 'hashed';
-        ?>
-        <select name="<?php echo esc_attr( $this->option_name ); ?>[ip_storage]">
-            <option value="off" <?php selected( $value, 'off' ); ?>>Off (do not store)</option>
-            <option value="hashed" <?php selected( $value, 'hashed' ); ?>>Hashed (recommended)</option>
-            <option value="raw" <?php selected( $value, 'raw' ); ?>>Raw IP</option>
-        </select>
-        <p class="description">
-            Controls how IP addresses are stored in Analytics. Hashed stores a one way hash for approximate uniqueness.
         </p>
         <?php
     }
@@ -794,43 +667,6 @@ class RivianTrackr_AI_Search {
 
     $logs_built      = false;
     $logs_error      = '';
-    $anonymized      = false;
-    $anonymize_error = '';
-
-    // Handle explicit admin actions via query params.
-    if (
-        isset( $_GET['rt_ai_rebuild_logs'] ) &&
-        $_GET['rt_ai_rebuild_logs'] === '1' &&
-        isset( $_GET['_wpnonce'] ) &&
-        wp_verify_nonce( $_GET['_wpnonce'], 'rt_ai_rebuild_logs' )
-    ) {
-        $logs_built = $this->ensure_logs_table();
-        if ( ! $logs_built ) {
-            $logs_error = 'Could not create or verify the analytics table. Check database permissions.';
-        }
-    }
-
-    if (
-        isset( $_GET['rt_ai_anonymize_ips'] ) &&
-        $_GET['rt_ai_anonymize_ips'] === '1' &&
-        isset( $_GET['_wpnonce'] ) &&
-        wp_verify_nonce( $_GET['_wpnonce'], 'rt_ai_anonymize_ips' )
-    ) {
-        $anonymized = $this->anonymize_existing_ips();
-        if ( ! $anonymized ) {
-            $anonymize_error = 'Could not anonymize existing IP addresses. Check database permissions.';
-        }
-    }
-
-    $logs_url = wp_nonce_url(
-        admin_url( 'admin.php?page=rt-ai-search-analytics&rt_ai_rebuild_logs=1' ),
-        'rt_ai_rebuild_logs'
-    );
-
-    $anonymize_url = wp_nonce_url(
-        admin_url( 'admin.php?page=rt-ai-search-analytics&rt_ai_anonymize_ips=1' ),
-        'rt_ai_anonymize_ips'
-    );
     ?>
     <div class="wrap">
         <h1>AI Search Analytics</h1>
@@ -845,22 +681,9 @@ class RivianTrackr_AI_Search {
             </div>
         <?php endif; ?>
 
-        <?php if ( $anonymized && empty( $anonymize_error ) ) : ?>
-            <div class="updated notice">
-                <p>Existing IP addresses have been anonymized successfully.</p>
-            </div>
-        <?php elseif ( ! empty( $anonymize_error ) ) : ?>
-            <div class="error notice">
-                <p><?php echo esc_html( $anonymize_error ); ?></p>
-            </div>
-        <?php endif; ?>
-
         <p style="margin-bottom:1rem;">
             <a href="<?php echo esc_url( $logs_url ); ?>" class="button">
                 Create or repair analytics table
-            </a>
-            <a href="<?php echo esc_url( $anonymize_url ); ?>" class="button button-secondary" style="margin-left: 8px;">
-                Anonymize existing IPs
             </a>
         </p>
 
@@ -1063,8 +886,7 @@ class RivianTrackr_AI_Search {
                         <th>AI status</th>
                         <th>Error (short)</th>
                         <th>Date</th>
-                        <th>IP</th>
-                    </tr>
+                                            </tr>
                 </thead>
                 <tbody>
                     <?php foreach ( $recent_events as $event ) : ?>
