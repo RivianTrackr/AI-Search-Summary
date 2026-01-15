@@ -21,7 +21,8 @@ class RivianTrackr_AI_Search {
 
     private $option_name         = 'rt_ai_search_options';
     private $models_cache_option = 'rt_ai_search_models_cache';
-    private $cache_keys_option   = 'rt_ai_search_cache_keys';
+    private $cache_keys_option      = 'rt_ai_search_cache_keys';
+    private $cache_namespace_option = 'rt_ai_search_cache_namespace';
     private $cache_prefix;
     private $cache_ttl           = 3600;
 
@@ -518,7 +519,27 @@ class RivianTrackr_AI_Search {
      *  Cache helpers
      * --------------------------------------------------------- */
 
+    private function get_cache_namespace() {
+        $ns = (int) get_option( $this->cache_namespace_option, 1 );
+        if ( $ns < 1 ) {
+            $ns = 1;
+            update_option( $this->cache_namespace_option, $ns );
+        }
+        return $ns;
+    }
+
+    private function bump_cache_namespace() {
+        $ns = $this->get_cache_namespace();
+        $ns++;
+        update_option( $this->cache_namespace_option, $ns );
+        return $ns;
+    }
+
     private function clear_ai_cache() {
+        // Namespace based invalidation: bump namespace so all previous cache keys become unreachable.
+        $this->bump_cache_namespace();
+
+        // Backward compatibility cleanup: if older versions stored explicit transient keys, delete them too.
         $keys = get_option( $this->cache_keys_option, array() );
         if ( is_array( $keys ) ) {
             foreach ( $keys as $key ) {
@@ -526,6 +547,7 @@ class RivianTrackr_AI_Search {
             }
         }
         delete_option( $this->cache_keys_option );
+
         return true;
     }
 
@@ -1347,7 +1369,8 @@ public function enqueue_frontend_assets() {
         }
 
         $normalized_query = strtolower( trim( $search_query ) );
-        $cache_key        = $this->cache_prefix . md5( $options['model'] . '|' . $normalized_query );
+        $namespace        = $this->get_cache_namespace();
+        $cache_key        = $this->cache_prefix . 'ns' . $namespace . '_' . md5( $options['model'] . '|' . $normalized_query );
         $cached_raw       = get_transient( $cache_key );
 
         if ( $cached_raw ) {
@@ -1423,15 +1446,6 @@ public function enqueue_frontend_assets() {
         $ttl        = $ttl_option > 0 ? $ttl_option : $this->cache_ttl;
 
         set_transient( $cache_key, wp_json_encode( $decoded ), $ttl );
-
-        $keys = get_option( $this->cache_keys_option, array() );
-        if ( ! is_array( $keys ) ) {
-            $keys = array();
-        }
-        if ( ! in_array( $cache_key, $keys, true ) ) {
-            $keys[] = $cache_key;
-            update_option( $this->cache_keys_option, $keys );
-        }
 
         return $decoded;
     }
