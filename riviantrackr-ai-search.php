@@ -425,7 +425,7 @@ class RivianTrackr_AI_Search {
     }
 
     /* ---------------------------------------------------------
-     *  Model list helpers
+     *  Model list helpers - Updated with better filtering
      * --------------------------------------------------------- */
 
     private function fetch_models_from_openai( $api_key ) {
@@ -470,14 +470,49 @@ class RivianTrackr_AI_Search {
 
             $id = $model['id'];
 
+            // Only include chat completion models (exclude audio, vision, embedding, etc.)
+            // Strict filtering to show only relevant models
             if (
+                // GPT-5 series (future)
                 strpos( $id, 'gpt-5.1' ) === 0 ||
                 strpos( $id, 'gpt-5' ) === 0 ||
+                
+                // GPT-4 series
                 strpos( $id, 'gpt-4.1' ) === 0 ||
                 strpos( $id, 'gpt-4o' ) === 0 ||
+                strpos( $id, 'gpt-4-turbo' ) === 0 ||
+                strpos( $id, 'gpt-4-' ) === 0 ||
+                strpos( $id, 'gpt-4' ) === 0 ||
+                
+                // GPT-3.5 series
                 strpos( $id, 'gpt-3.5-turbo' ) === 0
             ) {
-                $models[] = $id;
+                // Additional filters to exclude unwanted variants
+                // Exclude: audio, realtime, vision-only, preview versions, pro versions
+                $exclude_patterns = array(
+                    '-audio-',
+                    '-realtime-',
+                    '-vision-',
+                    '-preview',
+                    '-pro',
+                    'whisper',
+                    'dall-e',
+                    'tts',
+                    'embedding',
+                    'moderation',
+                );
+
+                $should_exclude = false;
+                foreach ( $exclude_patterns as $pattern ) {
+                    if ( stripos( $id, $pattern ) !== false ) {
+                        $should_exclude = true;
+                        break;
+                    }
+                }
+
+                if ( ! $should_exclude ) {
+                    $models[] = $id;
+                }
             }
         }
 
@@ -488,16 +523,18 @@ class RivianTrackr_AI_Search {
     }
 
     private function get_available_models_for_dropdown( $api_key ) {
+        // Clean, curated default list - only chat completion models
         $default_models = array(
-            'gpt-4o-mini',      // Added first - recommended default
+            'gpt-4o-mini',
             'gpt-4o',
+            'gpt-4-turbo',
             'gpt-4.1-mini',
             'gpt-4.1',
             'gpt-3.5-turbo',
-            'gpt-5.1',          // Future proofing
+            // Future models
+            'gpt-5.1',
             'gpt-5',
             'gpt-5-mini',
-            'gpt-5-nano',
         );
 
         if ( empty( $api_key ) ) {
