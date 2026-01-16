@@ -691,65 +691,19 @@ class RivianTrackr_AI_Search {
 
             $id = $model['id'];
 
-            // Only include chat completion models (exclude audio, vision, embedding, etc.)
-            // Strict filtering to show only relevant models
             if (
-                // GPT-5 series (future)
-                strpos( $id, 'gpt-5.1' ) === 0 ||
-                strpos( $id, 'gpt-5' ) === 0 ||
-                
-                // GPT-4 series
-                strpos( $id, 'gpt-4.1' ) === 0 ||
-                strpos( $id, 'gpt-4o' ) === 0 ||
-                strpos( $id, 'gpt-4-turbo' ) === 0 ||
-                strpos( $id, 'gpt-4-' ) === 0 ||
-                strpos( $id, 'gpt-4' ) === 0 ||
-                
-                // GPT-3.5 series
-                strpos( $id, 'gpt-3.5-turbo' ) === 0
-            ) {
-                // Additional filters to exclude unwanted variants
-                // Exclude: dated versions, transcribe, codex, search-api, instruct, special variants
-                $exclude_patterns = array(
-                    '-audio-',
-                    '-realtime-',
-                    '-vision-',
-                    '-preview',
-                    '-pro',
-                    '-transcribe',
-                    '-diarize',
-                    '-codex',
-                    '-search-api',
-                    '-instruct',
-                    '-chat-latest',
-                    'whisper',
-                    'dall-e',
-                    'tts',
-                    'embedding',
-                    'moderation',
-                    // Exclude dated versions (keep only base model names)
-                    '-2024-',
-                    '-2025-',
-                    '-0613',
-                    '-0914',
-                    '-0125',
-                    '-1106',
-                    '-16k',
-                );
-
-                $should_exclude = false;
-                foreach ( $exclude_patterns as $pattern ) {
-                    if ( stripos( $id, $pattern ) !== false ) {
-                        $should_exclude = true;
-                        break;
+                        strpos( $id, 'gpt-5.1' ) === 0 ||
+                        strpos( $id, 'gpt-5' ) === 0 ||
+                        strpos( $id, 'gpt-4.1' ) === 0 ||
+                        strpos( $id, 'gpt-4o' ) === 0 ||
+                        strpos( $id, 'gpt-4-turbo' ) === 0 ||
+                        strpos( $id, 'gpt-4-' ) === 0 ||
+                        strpos( $id, 'gpt-4' ) === 0 ||
+                        strpos( $id, 'gpt-3.5-turbo' ) === 0
+                    ) {
+                        $models[] = $id;
                     }
                 }
-
-                if ( ! $should_exclude ) {
-                    $models[] = $id;
-                }
-            }
-        }
 
         $models = array_unique( $models );
         sort( $models );
