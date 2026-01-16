@@ -168,7 +168,10 @@ class RivianTrackr_AI_Search {
         }
     }
 
-    // Update get_options() to use constant
+    /* ---------------------------------------------------------
+     *  Options and settings
+     * --------------------------------------------------------- */
+
     public function get_options() {
         if ( is_array( $this->options_cache ) ) {
             return $this->options_cache;
@@ -176,7 +179,7 @@ class RivianTrackr_AI_Search {
 
         $defaults = array(
             'api_key'              => '',
-            'model'                => 'gpt-4.1-mini',
+            'model'                => 'gpt-4o-mini',
             'max_posts'            => 10,
             'enable'               => 0,
             'max_calls_per_minute' => 30,
@@ -189,12 +192,11 @@ class RivianTrackr_AI_Search {
         return $this->options_cache;
     }
 
-    // Update sanitize_options() to use constants
     public function sanitize_options( $input ) {
         $output = array();
 
         $output['api_key']   = isset( $input['api_key'] ) ? trim( $input['api_key'] ) : '';
-        $output['model']     = isset( $input['model'] ) ? sanitize_text_field( $input['model'] ) : 'gpt-4.1-mini';
+        $output['model']     = isset( $input['model'] ) ? sanitize_text_field( $input['model'] ) : 'gpt-4o-mini';  // Updated default
         $output['max_posts'] = isset( $input['max_posts'] ) ? max( 1, intval( $input['max_posts'] ) ) : 10;
         $output['enable']    = ! empty( $input['enable'] ) ? 1 : 0;
 
@@ -344,8 +346,20 @@ class RivianTrackr_AI_Search {
             <?php endforeach; ?>
         </select>
         <p class="description">
-            Pick the OpenAI model to use for AI search. Use the button below to refresh the list from OpenAI.
+            Pick the OpenAI model to use for AI search. 
+            <strong>Recommended: gpt-4o-mini</strong> (fastest & cheapest, ~2-3 seconds per summary).
+            Use the button below to refresh the list from OpenAI.
         </p>
+        
+        <div style="margin-top: 0.75rem; padding: 0.75rem; background: #f0f9ff; border-left: 3px solid #3b82f6; font-size: 0.9em;">
+            <strong>Model Speed Comparison:</strong>
+            <ul style="margin: 0.5rem 0 0 1.5rem; padding: 0;">
+                <li><strong>gpt-4o-mini:</strong> ~2-3 sec (recommended - fastest & cheapest)</li>
+                <li><strong>gpt-3.5-turbo:</strong> ~2-4 sec (legacy, but fast)</li>
+                <li><strong>gpt-4o:</strong> ~3-5 sec (excellent quality, higher cost)</li>
+                <li><strong>gpt-4.1-mini:</strong> ~4-6 sec (newer, high quality)</li>
+            </ul>
+        </div>
         <?php
     }
 
@@ -475,15 +489,15 @@ class RivianTrackr_AI_Search {
 
     private function get_available_models_for_dropdown( $api_key ) {
         $default_models = array(
-            'gpt-5.1',
+            'gpt-4o-mini',      // Added first - recommended default
+            'gpt-4o',
+            'gpt-4.1-mini',
+            'gpt-4.1',
+            'gpt-3.5-turbo',
+            'gpt-5.1',          // Future proofing
             'gpt-5',
             'gpt-5-mini',
             'gpt-5-nano',
-            'gpt-4.1',
-            'gpt-4.1-mini',
-            'gpt-4o',
-            'gpt-4.1-mini',
-            'gpt-3.5-turbo',
         );
 
         if ( empty( $api_key ) ) {
