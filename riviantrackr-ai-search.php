@@ -488,18 +488,32 @@ class RivianTrackr_AI_Search {
                 strpos( $id, 'gpt-3.5-turbo' ) === 0
             ) {
                 // Additional filters to exclude unwanted variants
-                // Exclude: audio, realtime, vision-only, preview versions, pro versions
+                // Exclude: dated versions, transcribe, codex, search-api, instruct, special variants
                 $exclude_patterns = array(
                     '-audio-',
                     '-realtime-',
                     '-vision-',
                     '-preview',
                     '-pro',
+                    '-transcribe',
+                    '-diarize',
+                    '-codex',
+                    '-search-api',
+                    '-instruct',
+                    '-chat-latest',
                     'whisper',
                     'dall-e',
                     'tts',
                     'embedding',
                     'moderation',
+                    // Exclude dated versions (keep only base model names)
+                    '-2024-',
+                    '-2025-',
+                    '-0613',
+                    '-0914',
+                    '-0125',
+                    '-1106',
+                    '-16k',
                 );
 
                 $should_exclude = false;
@@ -529,12 +543,16 @@ class RivianTrackr_AI_Search {
             'gpt-4o',
             'gpt-4-turbo',
             'gpt-4.1-mini',
+            'gpt-4.1-nano',
             'gpt-4.1',
+            'gpt-4',
             'gpt-3.5-turbo',
-            // Future models
+            // Future models (base names only)
+            'gpt-5.2',
             'gpt-5.1',
             'gpt-5',
             'gpt-5-mini',
+            'gpt-5-nano',
         );
 
         if ( empty( $api_key ) ) {
