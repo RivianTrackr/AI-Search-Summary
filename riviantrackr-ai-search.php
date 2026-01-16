@@ -1169,21 +1169,88 @@ public function enqueue_frontend_assets() {
         <?php
     }
 
+    
     /* ---------------------------------------------------------
-     *  REST route and AI logic
+     *  REST API security helpers
      * --------------------------------------------------------- */
 
-    
     /**
-     * Safe substring helper that works even if mbstring is not available.
+     * Check if request is from a likely bot/crawler based on user agent.
+     *
+     * @return bool True if likely a bot, false otherwise.
      */
-    private function safe_substr( $text, $start, $length ) {
-        if ( function_exists( 'mb_substr' ) ) {
-            return mb_substr( $text, $start, $length );
+    private function is_likely_bot() {
+        if ( ! isset( $_SERVER['HTTP_USER_AGENT'] ) ) {
+            return true; // No user agent = suspicious
         }
 
-        return substr( $text, $start, $length );
+        $user_agent = strtolower( $_SERVER['HTTP_USER_AGENT'] );
+        
+        // Common bot patterns
+        $bot_patterns = array(
+            'bot', 'crawl', 'spider', 'slurp', 'scanner',
+            'scraper', 'curl', 'wget', 'python', 'java',
+        );
+
+        foreach ( $bot_patterns as $pattern ) {
+            if ( strpos( $user_agent, $pattern ) !== false ) {
+                return true;
+            }
+        }
+
+        return false;
     }
+
+    /**
+     * Rate limit check per IP address to prevent individual abuse.
+     *
+     * @param string $ip IP address to check.
+     * @return bool True if rate limited, false otherwise.
+     */
+    private function is_ip_rate_limited( $ip ) {
+        $key   = 'rt_ai_ip_rate_' . md5( $ip ) . '_' . gmdate( 'YmdHi' );
+        $limit = 10; // 10 requests per minute per IP
+        $count = (int) get_transient( $key );
+
+        if ( $count >= $limit ) {
+            return true;
+        }
+
+        $count++;
+        set_transient( $key, $count, 70 );
+
+        return false;
+    }
+
+    /**
+     * Get client IP address, accounting for proxies.
+     *
+     * @return string IP address or 'unknown'.
+     */
+    private function get_client_ip() {
+        $ip = 'unknown';
+
+        if ( ! empty( $_SERVER['HTTP_CLIENT_IP'] ) ) {
+            $ip = $_SERVER['HTTP_CLIENT_IP'];
+        } elseif ( ! empty( $_SERVER['HTTP_X_FORWARDED_FOR'] ) ) {
+            // Take first IP in list (original client)
+            $ips = explode( ',', $_SERVER['HTTP_X_FORWARDED_FOR'] );
+            $ip  = trim( $ips[0] );
+        } elseif ( ! empty( $_SERVER['REMOTE_ADDR'] ) ) {
+            $ip = $_SERVER['REMOTE_ADDR'];
+        }
+
+        // Validate IP
+        if ( filter_var( $ip, FILTER_VALIDATE_IP ) ) {
+            return $ip;
+        }
+
+        return 'unknown';
+    }
+
+    /* ---------------------------------------------------------
+     *  Updated REST route with security
+     * --------------------------------------------------------- */
 
     public function register_rest_routes() {
         register_rest_route(
@@ -1192,15 +1259,73 @@ public function enqueue_frontend_assets() {
             array(
                 'methods'             => 'GET',
                 'callback'            => array( $this, 'rest_get_summary' ),
-                'permission_callback' => '__return_true',
+                'permission_callback' => array( $this, 'rest_permission_check' ),
                 'args'                => array(
                     'q' => array(
                         'required'          => true,
                         'sanitize_callback' => 'sanitize_text_field',
+                        'validate_callback' => array( $this, 'validate_search_query' ),
                     ),
                 ),
             )
         );
+    }
+
+    /**
+     * Permission callback for REST API endpoint.
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return bool|WP_Error True if allowed, WP_Error if blocked.
+     */
+    public function rest_permission_check( WP_REST_Request $request ) {
+        // Block obvious bots to save API costs
+        if ( $this->is_likely_bot() ) {
+            return new WP_Error(
+                'rest_forbidden',
+                'AI search is not available for automated requests.',
+                array( 'status' => 403 )
+            );
+        }
+
+        // Per-IP rate limiting (more aggressive than global limit)
+        $client_ip = $this->get_client_ip();
+        if ( $this->is_ip_rate_limited( $client_ip ) ) {
+            return new WP_Error(
+                'rest_too_many_requests',
+                'Too many requests from your IP address. Please try again in a minute.',
+                array( 'status' => 429 )
+            );
+        }
+
+        return true;
+    }
+
+    /**
+     * Validate search query parameter.
+     *
+     * @param mixed           $value   Query value.
+     * @param WP_REST_Request $request Request object.
+     * @param string          $param   Parameter name.
+     * @return bool True if valid.
+     */
+    public function validate_search_query( $value, $request, $param ) {
+        // Query must be a string
+        if ( ! is_string( $value ) ) {
+            return false;
+        }
+
+        // Must not be empty after trimming
+        if ( empty( trim( $value ) ) ) {
+            return false;
+        }
+
+        // Reasonable length limits (prevent abuse)
+        $length = strlen( $value );
+        if ( $length < 2 || $length > 200 ) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

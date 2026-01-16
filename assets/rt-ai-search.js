@@ -18,7 +18,7 @@
 
     var endpoint = window.RTAISearch.endpoint + '?q=' + encodeURIComponent(q);
 
-    // Set timeout for 30 seconds - if request takes longer, show timeout message
+    // Set timeout for 30 seconds
     var timeoutId = setTimeout(function() {
       container.classList.add('rt-ai-loaded');
       container.innerHTML = '<p style="margin:0; opacity:0.8;">Request timed out. Please refresh the page to try again.</p>';
@@ -27,7 +27,24 @@
     fetch(endpoint, { credentials: 'same-origin' })
       .then(function(response) {
         clearTimeout(timeoutId);
-        if (!response.ok) throw new Error('Network response was not ok');
+        
+        // Handle specific HTTP error codes
+        if (response.status === 429) {
+          return {
+            error: 'Too many requests. Please wait a moment and try again.'
+          };
+        }
+        
+        if (response.status === 403) {
+          return {
+            error: 'Access denied. AI search is not available for this request.'
+          };
+        }
+        
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+        
         return response.json();
       })
       .then(function(data) {
