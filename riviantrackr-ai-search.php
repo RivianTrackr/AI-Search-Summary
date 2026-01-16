@@ -350,16 +350,6 @@ class RivianTrackr_AI_Search {
             <strong>Recommended: gpt-4o-mini</strong> (fastest & cheapest, ~2-3 seconds per summary).
             Use the button below to refresh the list from OpenAI.
         </p>
-        
-        <div style="margin-top: 0.75rem; padding: 0.75rem; background: #f0f9ff; border-left: 3px solid #3b82f6; font-size: 0.9em;">
-            <strong>Model Speed Comparison:</strong>
-            <ul style="margin: 0.5rem 0 0 1.5rem; padding: 0;">
-                <li><strong>gpt-4o-mini:</strong> ~2-3 sec (recommended - fastest & cheapest)</li>
-                <li><strong>gpt-3.5-turbo:</strong> ~2-4 sec (legacy, but fast)</li>
-                <li><strong>gpt-4o:</strong> ~3-5 sec (excellent quality, higher cost)</li>
-                <li><strong>gpt-4.1-mini:</strong> ~4-6 sec (newer, high quality)</li>
-            </ul>
-        </div>
         <?php
     }
 
