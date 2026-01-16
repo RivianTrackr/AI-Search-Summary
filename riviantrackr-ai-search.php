@@ -91,19 +91,65 @@ class RivianTrackr_AI_Search {
             ai_error text NULL,
             created_at datetime NOT NULL,
             PRIMARY KEY  (id),
-            KEY created_at (created_at)
+            KEY created_at (created_at),
+            KEY search_query_created (search_query(100), created_at),
+            KEY ai_success_created (ai_success, created_at)
         ) $charset_collate;";
 
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
         dbDelta( $sql );
     }
 
+    /**
+     * Add missing indexes to existing table (for upgrades).
+     * Called during plugin activation or via admin action.
+     */
+    private static function add_missing_indexes() {
+        global $wpdb;
+        $table_name = self::get_logs_table_name();
+
+        // Check if table exists
+        $table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
+        if ( $table_exists !== $table_name ) {
+            return false;
+        }
+
+        // Get existing indexes
+        $indexes = $wpdb->get_results( "SHOW INDEX FROM $table_name" );
+        $index_names = array();
+        foreach ( $indexes as $index ) {
+            $index_names[] = $index->Key_name;
+        }
+
+        // Add search_query_created index if missing
+        if ( ! in_array( 'search_query_created', $index_names, true ) ) {
+            $wpdb->query( 
+                "ALTER TABLE $table_name 
+                 ADD INDEX search_query_created (search_query(100), created_at)"
+            );
+            error_log( '[RivianTrackr AI Search] Added search_query_created index' );
+        }
+
+        // Add ai_success_created index if missing
+        if ( ! in_array( 'ai_success_created', $index_names, true ) ) {
+            $wpdb->query(
+                "ALTER TABLE $table_name 
+                 ADD INDEX ai_success_created (ai_success, created_at)"
+            );
+            error_log( '[RivianTrackr AI Search] Added ai_success_created index' );
+        }
+
+        return true;
+    }
+
     public static function activate() {
         self::create_logs_table();
+        self::add_missing_indexes(); // Add indexes to existing tables
     }
 
     private function ensure_logs_table() {
         self::create_logs_table();
+        self::add_missing_indexes(); // Ensure indexes exist
         $this->logs_table_checked = false;
         return $this->logs_table_is_available();
     }
@@ -1586,7 +1632,6 @@ public function enqueue_frontend_assets() {
         return false;
     }
 
-    // Updated get_ai_data_for_search() with better error messages
     private function get_ai_data_for_search( $search_query, $posts_for_ai, &$ai_error = '' ) {
         $options = $this->get_options();
         if ( empty( $options['api_key'] ) || empty( $options['enable'] ) ) {
@@ -1767,7 +1812,7 @@ public function enqueue_frontend_assets() {
             'timeout' => RT_AI_SEARCH_API_TIMEOUT,
         );
 
-        $response = wp_remote_post( $endpoint, $args );
+        $response = wp_safe_remote_post( $endpoint, $args );
 
         if ( is_wp_error( $response ) ) {
             $error_msg = $response->get_error_message();
