@@ -1880,7 +1880,19 @@ class RivianTrackr_AI_Search {
     }
 
     public function enqueue_admin_assets( $hook ) {
-        if ( strpos( $hook, 'rt-ai-search' ) === false ) {
+        // Load on all our plugin pages
+        // Hook can be: toplevel_page_rt-ai-search-settings or ai-search_page_rt-ai-search-analytics
+        $allowed_hooks = array(
+            'toplevel_page_rt-ai-search-settings',
+            'ai-search_page_rt-ai-search-analytics',
+            'riviantrackr-ai-search_page_rt-ai-search-analytics', // Alternative hook name
+        );
+        
+        // Also check if hook contains our plugin slug
+        $is_our_page = in_array( $hook, $allowed_hooks, true ) || 
+                       strpos( $hook, 'rt-ai-search' ) !== false;
+        
+        if ( ! $is_our_page ) {
             return;
         }
 
