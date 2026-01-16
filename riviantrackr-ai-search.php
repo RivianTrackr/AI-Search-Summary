@@ -1203,6 +1203,57 @@ public function enqueue_frontend_assets() {
         );
     }
 
+    /**
+     * Intelligently truncate text at sentence boundaries.
+     * 
+     * Attempts to cut at the last complete sentence within the limit.
+     * Falls back to word boundary if no sentence ending is found.
+     *
+     * @param string $text Text to truncate.
+     * @param int    $limit Maximum length in characters.
+     * @return string Truncated text.
+     */
+    private function smart_truncate( $text, $limit ) {
+        if ( empty( $text ) ) {
+            return '';
+        }
+
+        // Use safe_substr for multibyte support
+        if ( $this->safe_substr( $text, 0, $limit ) === $text ) {
+            // Text is already shorter than limit
+            return $text;
+        }
+
+        // Get text up to limit
+        $truncated = $this->safe_substr( $text, 0, $limit );
+
+        // Try to find last sentence ending (., !, ?)
+        $sentence_endings = array( '. ', '! ', '? ', '."', '!"', '?"', ".'", "!'", "?'" );
+        $last_sentence_pos = 0;
+
+        foreach ( $sentence_endings as $ending ) {
+            $pos = strrpos( $truncated, $ending );
+            if ( $pos !== false && $pos > $last_sentence_pos ) {
+                $last_sentence_pos = $pos + strlen( $ending );
+            }
+        }
+
+        // If we found a sentence ending and it's not too early (at least 50% of limit)
+        if ( $last_sentence_pos > 0 && $last_sentence_pos >= ( $limit * 0.5 ) ) {
+            return trim( $this->safe_substr( $truncated, 0, $last_sentence_pos ) );
+        }
+
+        // Fall back to word boundary
+        $last_space = strrpos( $truncated, ' ' );
+        if ( $last_space !== false && $last_space >= ( $limit * 0.7 ) ) {
+            return trim( $this->safe_substr( $truncated, 0, $last_space ) ) . '...';
+        }
+
+        // Last resort: hard cut with ellipsis
+        return $truncated . '...';
+    }
+
+    // Updated rest_get_summary() to use smart truncation
     public function rest_get_summary( WP_REST_Request $request ) {
         $options = $this->get_options();
 
@@ -1237,13 +1288,12 @@ public function enqueue_frontend_assets() {
         $post_type = 'any';
 
         // Single optimized query that gets all posts sorted by relevance and recency
-        // WordPress search relevance + date ordering gives us the best results first
         $search_args = array(
             's'              => $search_query,
             'post_type'      => $post_type,
             'posts_per_page' => $max_posts,
             'post_status'    => 'publish',
-            'orderby'        => 'date',  // Prefer newer content
+            'orderby'        => 'date',
             'order'          => 'DESC',
         );
 
@@ -1252,21 +1302,24 @@ public function enqueue_frontend_assets() {
         $posts_for_ai = array();
 
         if ( $search_results->have_posts() ) {
-                foreach ( $search_results->posts as $post ) {
-                    $content = wp_strip_all_tags( $post->post_content );
-                    $content = $this->safe_substr( $content, 0, RT_AI_SEARCH_CONTENT_LENGTH );
+            foreach ( $search_results->posts as $post ) {
+                $content = wp_strip_all_tags( $post->post_content );
+                
+                // Use smart truncation for better sentence boundaries
+                $truncated_content = $this->smart_truncate( $content, RT_AI_SEARCH_CONTENT_LENGTH );
+                $excerpt = $this->smart_truncate( $content, RT_AI_SEARCH_EXCERPT_LENGTH );
 
-                    $posts_for_ai[] = array(
-                        'id'      => $post->ID,
-                        'title'   => get_the_title( $post ),
-                        'url'     => get_permalink( $post ),
-                        'excerpt' => $this->safe_substr( $content, 0, RT_AI_SEARCH_EXCERPT_LENGTH ),
-                        'content' => $content,
-                        'type'    => $post->post_type,
-                        'date'    => get_the_date( 'Y-m-d', $post ),
-                    );
-                }
+                $posts_for_ai[] = array(
+                    'id'      => $post->ID,
+                    'title'   => get_the_title( $post ),
+                    'url'     => get_permalink( $post ),
+                    'excerpt' => $excerpt,
+                    'content' => $truncated_content,
+                    'type'    => $post->post_type,
+                    'date'    => get_the_date( 'Y-m-d', $post ),
+                );
             }
+        }
 
         $results_count = count( $posts_for_ai );
         $ai_error      = '';
