@@ -1241,21 +1241,77 @@ class RivianTrackr_AI_Search {
         return (int) round( ( $success_count / $total ) * 100 );
     }
 
-    /* ---------------------------------------------------------
-     *  Analytics page (updated to use helper)
-     * --------------------------------------------------------- */
-
-    private function render_analytics_section() {
-        if ( ! $this->logs_table_is_available() ) {
-            ?>
-            <p>No analytics data yet. After visitors use search, you will see top queries and recent events here.</p>
-            <?php
+    public function render_analytics_page() {
+        if ( ! current_user_can( 'manage_options' ) ) {
             return;
         }
 
+        $logs_built      = false;
+        $logs_error      = '';
+
+        // Handle the create/repair action
+        if (
+            isset( $_GET['rt_ai_build_logs'] ) &&
+            $_GET['rt_ai_build_logs'] === '1' &&
+            isset( $_GET['_wpnonce'] ) &&
+            wp_verify_nonce( $_GET['_wpnonce'], 'rt_ai_build_logs' )
+        ) {
+            $logs_built = $this->ensure_logs_table();
+            if ( ! $logs_built ) {
+                $logs_error = 'Could not create or repair the analytics table. Check error logs for details.';
+            }
+        }
+
+        // Create the URL for the create/repair button
+        $logs_url = wp_nonce_url(
+            admin_url( 'admin.php?page=rt-ai-search-analytics&rt_ai_build_logs=1' ),
+            'rt_ai_build_logs'
+        );
+        ?>
+        
+        <div class="rt-ai-settings-wrap">
+            <!-- Header -->
+            <div class="rt-ai-header">
+                <h1>Analytics</h1>
+                <p>Track AI search usage, success rates, and identify trends.</p>
+            </div>
+
+            <!-- Notifications -->
+            <?php if ( $logs_built && empty( $logs_error ) ) : ?>
+                <div class="rt-ai-notice rt-ai-notice-success">
+                    Analytics table has been created or repaired successfully.
+                </div>
+            <?php elseif ( ! empty( $logs_error ) ) : ?>
+                <div class="rt-ai-notice rt-ai-notice-error">
+                    <?php echo esc_html( $logs_error ); ?>
+                </div>
+            <?php endif; ?>
+
+            <?php if ( ! $this->logs_table_is_available() ) : ?>
+                <!-- No Data State -->
+                <div class="rt-ai-empty-state">
+                    <div class="rt-ai-empty-icon">📊</div>
+                    <h3>No Analytics Data Yet</h3>
+                    <p>After visitors use search, analytics data will appear here.</p>
+                    <a href="<?php echo esc_url( $logs_url ); ?>" class="rt-ai-button rt-ai-button-primary">
+                        Create Analytics Table
+                    </a>
+                </div>
+            <?php else : ?>
+                <?php $this->render_analytics_content(); ?>
+            <?php endif; ?>
+        </div>
+        <?php
+    }
+
+    /**
+     * Render the main analytics content (separated for clarity).
+     */
+    private function render_analytics_content() {
         global $wpdb;
         $table_name = self::get_logs_table_name();
 
+        // Get overview stats
         $totals = $wpdb->get_row(
             "SELECT
                 COUNT(*) AS total,
@@ -1317,153 +1373,207 @@ class RivianTrackr_AI_Search {
         );
         ?>
 
-        <h2>Overview</h2>
-        <div style="display:flex; flex-wrap:wrap; gap:1rem; margin-bottom:1.5rem;">
-            <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Total AI searches</h3>
-                <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $total_searches ); ?></p>
+        <!-- Overview Stats Grid -->
+        <div class="rt-ai-stats-grid">
+            <div class="rt-ai-stat-card">
+                <div class="rt-ai-stat-label">Total Searches</div>
+                <div class="rt-ai-stat-value"><?php echo number_format( $total_searches ); ?></div>
             </div>
-            <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Overall success rate</h3>
-                <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $success_rate ); ?>%</p>
+            <div class="rt-ai-stat-card">
+                <div class="rt-ai-stat-label">Success Rate</div>
+                <div class="rt-ai-stat-value"><?php echo esc_html( $success_rate ); ?>%</div>
             </div>
-            <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Searches last 24 hours</h3>
-                <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $last_24 ); ?></p>
+            <div class="rt-ai-stat-card">
+                <div class="rt-ai-stat-label">Last 24 Hours</div>
+                <div class="rt-ai-stat-value"><?php echo number_format( $last_24 ); ?></div>
             </div>
-            <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Total AI errors</h3>
-                <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $error_count ); ?></p>
+            <div class="rt-ai-stat-card">
+                <div class="rt-ai-stat-label">Total Errors</div>
+                <div class="rt-ai-stat-value"><?php echo number_format( $error_count ); ?></div>
             </div>
-            <div style="flex:1 1 180px; min-width:180px; padding:0.75rem 1rem; border:1px solid #ccd0d4; border-radius:6px; background:#fff;">
-                <h3 style="margin:0 0 0.25rem 0; font-size:13px; text-transform:uppercase; letter-spacing:0.04em; opacity:0.7;">Searches with no results</h3>
-                <p style="margin:0; font-size:20px; font-weight:600;"><?php echo esc_html( $no_results_count ); ?></p>
+            <div class="rt-ai-stat-card">
+                <div class="rt-ai-stat-label">No Results</div>
+                <div class="rt-ai-stat-value"><?php echo number_format( $no_results_count ); ?></div>
             </div>
         </div>
 
-        <h2>Last 14 days</h2>
-        <?php if ( ! empty( $daily_stats ) ) : ?>
-            <table class="widefat striped" style="max-width: 600px;">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Total searches</th>
-                        <th>Success rate</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ( $daily_stats as $row ) : ?>
-                        <?php
-                        $day_total = (int) $row->total;
-                        $day_success = (int) $row->success_count;
-                        $day_rate = $this->calculate_success_rate( $day_success, $day_total );
-                        ?>
-                        <tr>
-                            <td><?php echo esc_html( $row->day ); ?></td>
-                            <td><?php echo esc_html( $day_total ); ?></td>
-                            <td><?php echo esc_html( $day_rate ); ?>%</td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        <?php else : ?>
-            <p>No recent activity yet.</p>
-        <?php endif; ?>
+        <!-- Daily Stats Section -->
+        <div class="rt-ai-section">
+            <div class="rt-ai-section-header">
+                <h2>Last 14 Days</h2>
+                <p>Daily search volume and success rates</p>
+            </div>
+            <div class="rt-ai-section-content">
+                <?php if ( ! empty( $daily_stats ) ) : ?>
+                    <div class="rt-ai-table-wrapper">
+                        <table class="rt-ai-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Total Searches</th>
+                                    <th>Success Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ( $daily_stats as $row ) : ?>
+                                    <?php
+                                    $day_total = (int) $row->total;
+                                    $day_success = (int) $row->success_count;
+                                    $day_rate = $this->calculate_success_rate( $day_success, $day_total );
+                                    ?>
+                                    <tr>
+                                        <td><?php echo esc_html( date_i18n( get_option( 'date_format' ), strtotime( $row->day ) ) ); ?></td>
+                                        <td><?php echo number_format( $day_total ); ?></td>
+                                        <td>
+                                            <span class="rt-ai-badge rt-ai-badge-<?php echo $day_rate >= 90 ? 'success' : ( $day_rate >= 70 ? 'warning' : 'error' ); ?>">
+                                                <?php echo esc_html( $day_rate ); ?>%
+                                            </span>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else : ?>
+                    <div class="rt-ai-empty-message">No recent activity yet.</div>
+                <?php endif; ?>
+            </div>
+        </div>
 
-        <h2 style="margin-top: 2rem;">Top search queries</h2>
-        <?php if ( ! empty( $top_queries ) ) : ?>
-            <table class="widefat striped" style="max-width: 900px;">
-                <thead>
-                    <tr>
-                        <th style="width: 50%;">Query</th>
-                        <th>Total searches</th>
-                        <th>AI success rate</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ( $top_queries as $row ) : ?>
-                        <?php
-                        $total_q = (int) $row->total;
-                        $success_q = (int) $row->success_count;
-                        $success_q_rate = $this->calculate_success_rate( $success_q, $total_q );
-                        ?>
-                        <tr>
-                            <td><?php echo esc_html( $row->search_query ); ?></td>
-                            <td><?php echo esc_html( $total_q ); ?></td>
-                            <td><?php echo esc_html( $success_q_rate ); ?>%</td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        <?php else : ?>
-            <p>No search data yet.</p>
-        <?php endif; ?>
+        <!-- Top Queries Section -->
+        <div class="rt-ai-section">
+            <div class="rt-ai-section-header">
+                <h2>Top Search Queries</h2>
+                <p>Most frequently searched terms</p>
+            </div>
+            <div class="rt-ai-section-content">
+                <?php if ( ! empty( $top_queries ) ) : ?>
+                    <div class="rt-ai-table-wrapper">
+                        <table class="rt-ai-table">
+                            <thead>
+                                <tr>
+                                    <th>Query</th>
+                                    <th>Total Searches</th>
+                                    <th>AI Success Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ( $top_queries as $row ) : ?>
+                                    <?php
+                                    $total_q = (int) $row->total;
+                                    $success_q = (int) $row->success_count;
+                                    $success_q_rate = $this->calculate_success_rate( $success_q, $total_q );
+                                    ?>
+                                    <tr>
+                                        <td class="rt-ai-query-cell"><?php echo esc_html( $row->search_query ); ?></td>
+                                        <td><?php echo number_format( $total_q ); ?></td>
+                                        <td>
+                                            <span class="rt-ai-badge rt-ai-badge-<?php echo $success_q_rate >= 90 ? 'success' : ( $success_q_rate >= 70 ? 'warning' : 'error' ); ?>">
+                                                <?php echo esc_html( $success_q_rate ); ?>%
+                                            </span>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else : ?>
+                    <div class="rt-ai-empty-message">No search data yet.</div>
+                <?php endif; ?>
+            </div>
+        </div>
 
-        <h2 style="margin-top: 2rem;">Top AI errors</h2>
+        <!-- Top Errors Section -->
         <?php if ( ! empty( $top_errors ) ) : ?>
-            <table class="widefat striped" style="max-width: 900px;">
-                <thead>
-                    <tr>
-                        <th style="width: 65%;">Error message</th>
-                        <th>Occurrences</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ( $top_errors as $err ) : ?>
-                        <tr>
-                            <td>
-                                <?php
-                                $msg = (string) $err->ai_error;
-                                if ( strlen( $msg ) > 120 ) {
-                                    $msg = substr( $msg, 0, 117 ) . '...';
-                                }
-                                echo esc_html( $msg );
-                                ?>
-                            </td>
-                            <td><?php echo esc_html( (int) $err->total ); ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        <?php else : ?>
-            <p>No AI errors logged yet.</p>
+            <div class="rt-ai-section">
+                <div class="rt-ai-section-header">
+                    <h2>Top AI Errors</h2>
+                    <p>Most common error messages</p>
+                </div>
+                <div class="rt-ai-section-content">
+                    <div class="rt-ai-table-wrapper">
+                        <table class="rt-ai-table">
+                            <thead>
+                                <tr>
+                                    <th>Error Message</th>
+                                    <th>Occurrences</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ( $top_errors as $err ) : ?>
+                                    <tr>
+                                        <td class="rt-ai-error-cell">
+                                            <?php
+                                            $msg = (string) $err->ai_error;
+                                            if ( strlen( $msg ) > 80 ) {
+                                                $msg = substr( $msg, 0, 77 ) . '...';
+                                            }
+                                            echo esc_html( $msg );
+                                            ?>
+                                        </td>
+                                        <td><?php echo number_format( (int) $err->total ); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         <?php endif; ?>
 
-        <h2 style="margin-top: 2rem;">Recent AI search events</h2>
-        <?php if ( ! empty( $recent_events ) ) : ?>
-            <table class="widefat striped" style="max-width: 1000px;">
-                <thead>
-                    <tr>
-                        <th style="width: 35%;">Query</th>
-                        <th>Results</th>
-                        <th>AI status</th>
-                        <th>Error (short)</th>
-                        <th>Date</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ( $recent_events as $event ) : ?>
-                        <tr>
-                            <td><?php echo esc_html( $event->search_query ); ?></td>
-                            <td><?php echo esc_html( (int) $event->results_count ); ?></td>
-                            <td><?php echo (int) $event->ai_success === 1 ? 'Success' : 'Error'; ?></td>
-                            <td>
-                                <?php
-                                $err = (string) $event->ai_error;
-                                if ( strlen( $err ) > 80 ) {
-                                    $err = substr( $err, 0, 77 ) . '...';
-                                }
-                                echo esc_html( $err );
-                                ?>
-                            </td>
-                            <td><?php echo esc_html( $event->created_at ); ?></td>
-                        </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        <?php else : ?>
-            <p>No recent search events logged yet.</p>
-        <?php endif; ?>
+        <!-- Recent Events Section -->
+        <div class="rt-ai-section">
+            <div class="rt-ai-section-header">
+                <h2>Recent AI Search Events</h2>
+                <p>Latest 50 search requests</p>
+            </div>
+            <div class="rt-ai-section-content">
+                <?php if ( ! empty( $recent_events ) ) : ?>
+                    <div class="rt-ai-table-wrapper">
+                        <table class="rt-ai-table rt-ai-table-compact">
+                            <thead>
+                                <tr>
+                                    <th>Query</th>
+                                    <th>Results</th>
+                                    <th>Status</th>
+                                    <th>Error</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ( $recent_events as $event ) : ?>
+                                    <tr>
+                                        <td class="rt-ai-query-cell"><?php echo esc_html( $event->search_query ); ?></td>
+                                        <td><?php echo esc_html( (int) $event->results_count ); ?></td>
+                                        <td>
+                                            <?php if ( (int) $event->ai_success === 1 ) : ?>
+                                                <span class="rt-ai-badge rt-ai-badge-success">Success</span>
+                                            <?php else : ?>
+                                                <span class="rt-ai-badge rt-ai-badge-error">Error</span>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td class="rt-ai-error-cell">
+                                            <?php
+                                            $err = (string) $event->ai_error;
+                                            if ( strlen( $err ) > 50 ) {
+                                                $err = substr( $err, 0, 47 ) . '...';
+                                            }
+                                            echo esc_html( $err );
+                                            ?>
+                                        </td>
+                                        <td class="rt-ai-date-cell">
+                                            <?php echo esc_html( date_i18n( 'M j, g:i a', strtotime( $event->created_at ) ) ); ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else : ?>
+                    <div class="rt-ai-empty-message">No recent search events logged yet.</div>
+                <?php endif; ?>
+            </div>
+        </div>
         <?php
     }
 
