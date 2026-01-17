@@ -4,13 +4,13 @@ declare(strict_types=1);
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add an OpenAI powered AI summary to WordPress search on RivianTrackr.com without delaying normal results, with analytics, cache control, and collapsible sources.
- * Version: 3.3.0
+ * Version: 3.3.1
  * Author URI: https://riviantrackr.com
  * Author: RivianTrackr
  * License: GPL v2 or later
  */
 
-define( 'RT_AI_SEARCH_VERSION', '3.3.0' );
+define( 'RT_AI_SEARCH_VERSION', '3.3.1' );
 define( 'RT_AI_SEARCH_MODELS_CACHE_TTL', 7 * DAY_IN_SECONDS );
 
 // Cache settings
@@ -1766,13 +1766,28 @@ class RivianTrackr_AI_Search {
 
     public function render_dashboard_widget() {
         if ( ! $this->logs_table_is_available() ) {
-            echo '<p>No AI search analytics data yet. Once visitors use search, stats will appear here.</p>';
+            ?>
+            <div style="padding: 20px; text-align: center;">
+                <div style="font-size: 48px; opacity: 0.3; margin-bottom: 12px;">📊</div>
+                <p style="margin: 0 0 8px 0; font-size: 15px; font-weight: 600; color: #1d1d1f;">
+                    No Analytics Data Yet
+                </p>
+                <p style="margin: 0 0 16px 0; font-size: 13px; color: #6e6e73;">
+                    Once visitors use search, stats will appear here.
+                </p>
+                <a href="<?php echo admin_url( 'admin.php?page=rt-ai-search-settings' ); ?>" 
+                   style="display: inline-block; padding: 6px 14px; background: #0071e3; color: #fff; text-decoration: none; border-radius: 6px; font-size: 13px; font-weight: 500;">
+                    Configure Plugin
+                </a>
+            </div>
+            <?php
             return;
         }
 
         global $wpdb;
         $table_name = self::get_logs_table_name();
 
+        // Get overview stats
         $totals = $wpdb->get_row(
             "SELECT COUNT(*) AS total, SUM(ai_success) AS success_count
              FROM $table_name"
@@ -1782,7 +1797,8 @@ class RivianTrackr_AI_Search {
         $success_count  = $totals ? (int) $totals->success_count : 0;
         $success_rate   = $this->calculate_success_rate( $success_count, $total_searches );
 
-        $since_24h = gmdate( 'Y-m-d H:i:s', time() - 24 * 60 * 60 );
+        // Get last 24 hours
+        $since_24h = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
         $last_24   = (int) $wpdb->get_var(
             $wpdb->prepare(
                 "SELECT COUNT(*) FROM $table_name WHERE created_at >= %s",
@@ -1790,6 +1806,7 @@ class RivianTrackr_AI_Search {
             )
         );
 
+        // Get top 5 queries
         $top_queries = $wpdb->get_results(
             "SELECT search_query, COUNT(*) AS total, SUM(ai_success) AS success_count
              FROM $table_name
@@ -1798,46 +1815,247 @@ class RivianTrackr_AI_Search {
              LIMIT 5"
         );
         ?>
-        <div style="font-size:13px; line-height:1.5;">
-            <p style="margin-top:0;">Quick snapshot of how often visitors are using AI search on RivianTrackr.</p>
+        
+        <style>
+            /* Dashboard Widget Styles - Apple inspired */
+            #rt_ai_search_dashboard_widget .inside {
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            
+            .rt-ai-widget-container {
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            }
+            
+            .rt-ai-widget-stats-grid {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 12px;
+                padding: 16px;
+                background: #f5f5f7;
+                border-bottom: 1px solid #d2d2d7;
+            }
+            
+            .rt-ai-widget-stat {
+                text-align: center;
+                padding: 12px 8px;
+                background: #fff;
+                border-radius: 8px;
+                border: 1px solid #e8e8ed;
+            }
+            
+            .rt-ai-widget-stat-value {
+                display: block;
+                font-size: 24px;
+                font-weight: 600;
+                color: #1d1d1f;
+                margin-bottom: 4px;
+            }
+            
+            .rt-ai-widget-stat-label {
+                display: block;
+                font-size: 11px;
+                color: #86868b;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                font-weight: 500;
+            }
+            
+            .rt-ai-widget-section {
+                padding: 16px;
+            }
+            
+            .rt-ai-widget-section-title {
+                margin: 0 0 12px 0;
+                font-size: 13px;
+                font-weight: 600;
+                color: #1d1d1f;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+            }
+            
+            .rt-ai-widget-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 13px;
+            }
+            
+            .rt-ai-widget-table thead {
+                background: #f5f5f7;
+            }
+            
+            .rt-ai-widget-table th {
+                padding: 8px 10px;
+                text-align: left;
+                font-size: 11px;
+                font-weight: 600;
+                color: #6e6e73;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                border-bottom: 1px solid #e8e8ed;
+            }
+            
+            .rt-ai-widget-table td {
+                padding: 10px;
+                border-bottom: 1px solid #f5f5f7;
+                color: #1d1d1f;
+            }
+            
+            .rt-ai-widget-table tbody tr:last-child td {
+                border-bottom: none;
+            }
+            
+            .rt-ai-widget-table tbody tr:hover {
+                background: #fafafa;
+            }
+            
+            .rt-ai-widget-query {
+                font-weight: 500;
+                color: #1d1d1f;
+            }
+            
+            .rt-ai-widget-count {
+                font-weight: 600;
+                color: #0071e3;
+            }
+            
+            .rt-ai-widget-badge {
+                display: inline-block;
+                padding: 2px 8px;
+                border-radius: 4px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            
+            .rt-ai-widget-badge-success {
+                background: #d1f4e0;
+                color: #0a5e2a;
+            }
+            
+            .rt-ai-widget-badge-warning {
+                background: #fff3cd;
+                color: #856404;
+            }
+            
+            .rt-ai-widget-badge-error {
+                background: #ffe5e5;
+                color: #c41e3a;
+            }
+            
+            .rt-ai-widget-footer {
+                padding: 12px 16px;
+                background: #f5f5f7;
+                border-top: 1px solid #d2d2d7;
+                text-align: center;
+            }
+            
+            .rt-ai-widget-link {
+                display: inline-block;
+                padding: 6px 14px;
+                background: #0071e3;
+                color: #fff;
+                text-decoration: none;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 500;
+                transition: background 0.2s;
+            }
+            
+            .rt-ai-widget-link:hover {
+                background: #0077ed;
+                color: #fff;
+            }
+            
+            .rt-ai-widget-empty {
+                padding: 12px;
+                text-align: center;
+                color: #86868b;
+                font-size: 12px;
+            }
+        </style>
+        
+        <div class="rt-ai-widget-container">
+            <!-- Stats Grid -->
+            <div class="rt-ai-widget-stats-grid">
+                <div class="rt-ai-widget-stat">
+                    <span class="rt-ai-widget-stat-value"><?php echo number_format( $total_searches ); ?></span>
+                    <span class="rt-ai-widget-stat-label">Total Searches</span>
+                </div>
+                <div class="rt-ai-widget-stat">
+                    <span class="rt-ai-widget-stat-value"><?php echo esc_html( $success_rate ); ?>%</span>
+                    <span class="rt-ai-widget-stat-label">Success Rate</span>
+                </div>
+                <div class="rt-ai-widget-stat">
+                    <span class="rt-ai-widget-stat-value"><?php echo number_format( $last_24 ); ?></span>
+                    <span class="rt-ai-widget-stat-label">Last 24 Hours</span>
+                </div>
+            </div>
 
-            <ul style="margin:0 0 1rem 1.2rem; padding:0;">
-                <li>Total AI searches: <?php echo esc_html( $total_searches ); ?></li>
-                <li>Overall AI success rate: <?php echo esc_html( $success_rate ); ?>%</li>
-                <li>Searches in the last 24 hours: <?php echo esc_html( $last_24 ); ?></li>
-            </ul>
-
-            <h4 style="margin:0 0 0.4rem 0; font-size:12px; text-transform:uppercase; letter-spacing:0.05em; opacity:0.7;">Top queries</h4>
-
-            <?php if ( ! empty( $top_queries ) ) : ?>
-                <table class="widefat striped" style="margin-top:0; font-size:12px;">
-                    <thead>
-                        <tr>
-                            <th>Query</th>
-                            <th>Total</th>
-                            <th>Success</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ( $top_queries as $row ) : ?>
-                            <?php
-                            $total_q = (int) $row->total;
-                            $success_q = (int) $row->success_count;
-                            $success_q_rate = $this->calculate_success_rate( $success_q, $total_q );
-                            ?>
+            <!-- Top Queries Section -->
+            <div class="rt-ai-widget-section">
+                <h4 class="rt-ai-widget-section-title">Top Search Queries</h4>
+                
+                <?php if ( ! empty( $top_queries ) ) : ?>
+                    <table class="rt-ai-widget-table">
+                        <thead>
                             <tr>
-                                <td><?php echo esc_html( $row->search_query ); ?></td>
-                                <td><?php echo esc_html( $total_q ); ?></td>
-                                <td><?php echo esc_html( $success_q_rate ); ?>%</td>
+                                <th>Query</th>
+                                <th style="text-align: center; width: 60px;">Count</th>
+                                <th style="text-align: center; width: 80px;">Success</th>
                             </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            <?php else : ?>
-                <p style="margin-top:0.3rem;">No searches logged yet.</p>
-            <?php endif; ?>
+                        </thead>
+                        <tbody>
+                            <?php foreach ( $top_queries as $row ) : ?>
+                                <?php
+                                $total_q = (int) $row->total;
+                                $success_q = (int) $row->success_count;
+                                $success_q_rate = $this->calculate_success_rate( $success_q, $total_q );
+                                
+                                // Determine badge class
+                                if ( $success_q_rate >= 90 ) {
+                                    $badge_class = 'rt-ai-widget-badge-success';
+                                } elseif ( $success_q_rate >= 70 ) {
+                                    $badge_class = 'rt-ai-widget-badge-warning';
+                                } else {
+                                    $badge_class = 'rt-ai-widget-badge-error';
+                                }
+                                ?>
+                                <tr>
+                                    <td class="rt-ai-widget-query">
+                                        <?php 
+                                        $query_display = esc_html( $row->search_query );
+                                        if ( strlen( $query_display ) > 35 ) {
+                                            $query_display = substr( $query_display, 0, 32 ) . '...';
+                                        }
+                                        echo $query_display;
+                                        ?>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <span class="rt-ai-widget-count"><?php echo number_format( $total_q ); ?></span>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <span class="rt-ai-widget-badge <?php echo esc_attr( $badge_class ); ?>">
+                                            <?php echo esc_html( $success_q_rate ); ?>%
+                                        </span>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php else : ?>
+                    <div class="rt-ai-widget-empty">
+                        No search data yet. Waiting for visitors to use AI search.
+                    </div>
+                <?php endif; ?>
+            </div>
 
-            <p style="margin-top:0.8rem; font-size:11px; opacity:0.7;">For more detail, go to AI Search in the sidebar and click Analytics.</p>
+            <!-- Footer with Link to Analytics -->
+            <div class="rt-ai-widget-footer">
+                <a href="<?php echo admin_url( 'admin.php?page=rt-ai-search-analytics' ); ?>" 
+                   class="rt-ai-widget-link">
+                    View Full Analytics →
+                </a>
+            </div>
         </div>
         <?php
     }
