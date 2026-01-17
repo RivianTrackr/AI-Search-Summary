@@ -4,13 +4,13 @@ declare(strict_types=1);
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add an OpenAI powered AI summary to WordPress search on RivianTrackr.com without delaying normal results, with analytics, cache control, and collapsible sources.
- * Version: 3.3.1
+ * Version: 3.3.2
  * Author URI: https://riviantrackr.com
  * Author: RivianTrackr
  * License: GPL v2 or later
  */
 
-define( 'RT_AI_SEARCH_VERSION', '3.3.1' );
+define( 'RT_AI_SEARCH_VERSION', '3.3.2' );
 define( 'RT_AI_SEARCH_MODELS_CACHE_TTL', 7 * DAY_IN_SECONDS );
 
 // Cache settings
@@ -1787,7 +1787,6 @@ class RivianTrackr_AI_Search {
         global $wpdb;
         $table_name = self::get_logs_table_name();
 
-        // Get overview stats
         $totals = $wpdb->get_row(
             "SELECT COUNT(*) AS total, SUM(ai_success) AS success_count
              FROM $table_name"
@@ -1797,7 +1796,6 @@ class RivianTrackr_AI_Search {
         $success_count  = $totals ? (int) $totals->success_count : 0;
         $success_rate   = $this->calculate_success_rate( $success_count, $total_searches );
 
-        // Get last 24 hours
         $since_24h = gmdate( 'Y-m-d H:i:s', time() - DAY_IN_SECONDS );
         $last_24   = (int) $wpdb->get_var(
             $wpdb->prepare(
@@ -1806,7 +1804,6 @@ class RivianTrackr_AI_Search {
             )
         );
 
-        // Get top 5 queries
         $top_queries = $wpdb->get_results(
             "SELECT search_query, COUNT(*) AS total, SUM(ai_success) AS success_count
              FROM $table_name
@@ -1815,164 +1812,6 @@ class RivianTrackr_AI_Search {
              LIMIT 5"
         );
         ?>
-        
-        <style>
-            /* Dashboard Widget Styles - Apple inspired */
-            #rt_ai_search_dashboard_widget .inside {
-                margin: 0 !important;
-                padding: 0 !important;
-            }
-            
-            .rt-ai-widget-container {
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            }
-            
-            .rt-ai-widget-stats-grid {
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 12px;
-                padding: 16px;
-                background: #f5f5f7;
-                border-bottom: 1px solid #d2d2d7;
-            }
-            
-            .rt-ai-widget-stat {
-                text-align: center;
-                padding: 12px 8px;
-                background: #fff;
-                border-radius: 8px;
-                border: 1px solid #e8e8ed;
-            }
-            
-            .rt-ai-widget-stat-value {
-                display: block;
-                font-size: 24px;
-                font-weight: 600;
-                color: #1d1d1f;
-                margin-bottom: 4px;
-            }
-            
-            .rt-ai-widget-stat-label {
-                display: block;
-                font-size: 11px;
-                color: #86868b;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                font-weight: 500;
-            }
-            
-            .rt-ai-widget-section {
-                padding: 16px;
-            }
-            
-            .rt-ai-widget-section-title {
-                margin: 0 0 12px 0;
-                font-size: 13px;
-                font-weight: 600;
-                color: #1d1d1f;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-            }
-            
-            .rt-ai-widget-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 13px;
-            }
-            
-            .rt-ai-widget-table thead {
-                background: #f5f5f7;
-            }
-            
-            .rt-ai-widget-table th {
-                padding: 8px 10px;
-                text-align: left;
-                font-size: 11px;
-                font-weight: 600;
-                color: #6e6e73;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                border-bottom: 1px solid #e8e8ed;
-            }
-            
-            .rt-ai-widget-table td {
-                padding: 10px;
-                border-bottom: 1px solid #f5f5f7;
-                color: #1d1d1f;
-            }
-            
-            .rt-ai-widget-table tbody tr:last-child td {
-                border-bottom: none;
-            }
-            
-            .rt-ai-widget-table tbody tr:hover {
-                background: #fafafa;
-            }
-            
-            .rt-ai-widget-query {
-                font-weight: 500;
-                color: #1d1d1f;
-            }
-            
-            .rt-ai-widget-count {
-                font-weight: 600;
-                color: #0071e3;
-            }
-            
-            .rt-ai-widget-badge {
-                display: inline-block;
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-size: 11px;
-                font-weight: 600;
-            }
-            
-            .rt-ai-widget-badge-success {
-                background: #d1f4e0;
-                color: #0a5e2a;
-            }
-            
-            .rt-ai-widget-badge-warning {
-                background: #fff3cd;
-                color: #856404;
-            }
-            
-            .rt-ai-widget-badge-error {
-                background: #ffe5e5;
-                color: #c41e3a;
-            }
-            
-            .rt-ai-widget-footer {
-                padding: 12px 16px;
-                background: #f5f5f7;
-                border-top: 1px solid #d2d2d7;
-                text-align: center;
-            }
-            
-            .rt-ai-widget-link {
-                display: inline-block;
-                padding: 6px 14px;
-                background: #0071e3;
-                color: #fff;
-                text-decoration: none;
-                border-radius: 6px;
-                font-size: 12px;
-                font-weight: 500;
-                transition: background 0.2s;
-            }
-            
-            .rt-ai-widget-link:hover {
-                background: #0077ed;
-                color: #fff;
-            }
-            
-            .rt-ai-widget-empty {
-                padding: 12px;
-                text-align: center;
-                color: #86868b;
-                font-size: 12px;
-            }
-        </style>
         
         <div class="rt-ai-widget-container">
             <!-- Stats Grid -->
@@ -1991,7 +1830,6 @@ class RivianTrackr_AI_Search {
                 </div>
             </div>
 
-            <!-- Top Queries Section -->
             <div class="rt-ai-widget-section">
                 <h4 class="rt-ai-widget-section-title">Top Search Queries</h4>
                 
@@ -2049,7 +1887,6 @@ class RivianTrackr_AI_Search {
                 <?php endif; ?>
             </div>
 
-            <!-- Footer with Link to Analytics -->
             <div class="rt-ai-widget-footer">
                 <a href="<?php echo admin_url( 'admin.php?page=rt-ai-search-analytics' ); ?>" 
                    class="rt-ai-widget-link">
