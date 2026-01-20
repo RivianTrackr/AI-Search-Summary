@@ -446,8 +446,25 @@ class RivianTrackr_AI_Search {
         $options = $this->get_options();
         $has_key = !empty($options['api_key']);
         
+        // DEBUG: Show what we're detecting
+        echo '<!-- DEBUG INFO -->';
+        echo '<!-- API Key exists: ' . ($has_key ? 'YES' : 'NO') . ' -->';
+        echo '<!-- API Key length: ' . strlen($options['api_key']) . ' -->';
+        echo '<!-- API Key first chars: ' . substr($options['api_key'], 0, 10) . '... -->';
+        echo '<!-- END DEBUG INFO -->';
+        
+        // Show masked version if key exists
         $display_value = $has_key ? '••••••••••••••••••••••••' : '';
         ?>
+        
+        <!-- DEBUG: Visual indicator -->
+        <div style="background: #fff3cd; padding: 10px; margin-bottom: 10px; border-left: 4px solid #ffc107;">
+            <strong>DEBUG MODE:</strong> 
+            API Key Detected: <strong><?php echo $has_key ? 'YES ✓' : 'NO ✗'; ?></strong><br>
+            Key Length: <?php echo strlen($options['api_key']); ?> characters<br>
+            First 10 chars: <code><?php echo esc_html(substr($options['api_key'], 0, 10)); ?>...</code>
+        </div>
+        
         <div class="rt-ai-field-input">
             <input type="password" 
                    id="rt-ai-api-key"
@@ -461,6 +478,10 @@ class RivianTrackr_AI_Search {
                 <p class="description" style="margin-top: 8px; color: #0a5e2a;">
                     <strong>✓ API key is set and encrypted.</strong> Leave this field as-is to keep your existing key, 
                     or paste a new key to replace it.
+                </p>
+            <?php else : ?>
+                <p class="description" style="margin-top: 8px; color: #d63638;">
+                    <strong>✗ No API key detected.</strong> This is why the Remove button isn't showing.
                 </p>
             <?php endif; ?>
         </div>
@@ -479,6 +500,10 @@ class RivianTrackr_AI_Search {
                         style="color: #d63638; border-color: #d63638;">
                     Remove API Key
                 </button>
+            <?php else : ?>
+                <span style="color: #d63638; font-style: italic;">
+                    (Remove button hidden - no API key detected)
+                </span>
             <?php endif; ?>
         </div>
         
@@ -501,13 +526,19 @@ class RivianTrackr_AI_Search {
                 var hasExistingKey = <?php echo $has_key ? 'true' : 'false'; ?>;
                 var fieldTouched = false;
                 
+                console.log('DEBUG: hasExistingKey =', hasExistingKey);
+                console.log('DEBUG: Remove button exists =', removeBtn.length > 0);
+                
+                // Track if user has modified the field
                 apiKeyInput.on('input', function() {
                     fieldTouched = true;
                 });
                 
+                // Test API key
                 btn.on('click', function() {
                     var apiKey = apiKeyInput.val().trim();
                     
+                    // If field shows masked key and user hasn't changed it, test existing key
                     if (hasExistingKey && !fieldTouched && apiKey.indexOf('•') === 0) {
                         apiKey = 'USE_EXISTING'; // Signal to use stored key
                     }
@@ -517,6 +548,7 @@ class RivianTrackr_AI_Search {
                         return;
                     }
                     
+                    // Don't test if it's just the masked value and field was cleared
                     if (apiKey.indexOf('•') === 0 && fieldTouched) {
                         resultDiv.html('<div class="rt-ai-test-result error"><p>Please enter a valid API key.</p></div>');
                         return;
@@ -554,19 +586,28 @@ class RivianTrackr_AI_Search {
                     });
                 });
                 
-                removeBtn.on('click', function() {
-                    if (confirm('Are you sure you want to remove your API key? This will disable AI search until you add a new key.')) {
-                        apiKeyInput.val('');
-                        apiKeyInput.attr('placeholder', 'sk-proj-...');
-                        removeBtn.remove();
-                        hasExistingKey = false;
-                        fieldTouched = true;
-                        resultDiv.html('<div class="rt-ai-test-result info"><p><strong>API key will be removed when you save settings.</strong> Don\'t forget to click "Save Settings" below.</p></div>');
-                        
-                        apiKeyInput.next('.description').remove();
-                    }
-                });
+                // Remove API key
+                if (removeBtn.length > 0) {
+                    console.log('DEBUG: Remove button found, attaching click handler');
+                    removeBtn.on('click', function() {
+                        console.log('DEBUG: Remove button clicked');
+                        if (confirm('Are you sure you want to remove your API key? This will disable AI search until you add a new key.')) {
+                            apiKeyInput.val('');
+                            apiKeyInput.attr('placeholder', 'sk-proj-...');
+                            removeBtn.remove();
+                            hasExistingKey = false;
+                            fieldTouched = true;
+                            resultDiv.html('<div class="rt-ai-test-result info"><p><strong>API key will be removed when you save settings.</strong> Don\'t forget to click "Save Settings" below.</p></div>');
+                            
+                            // Remove the success message
+                            apiKeyInput.next('.description').remove();
+                        }
+                    });
+                } else {
+                    console.log('DEBUG: Remove button NOT found in DOM');
+                }
                 
+                // Clear masked value on focus so user can paste new key
                 apiKeyInput.on('focus', function() {
                     if ($(this).val().indexOf('•') === 0) {
                         $(this).val('');
@@ -574,6 +615,7 @@ class RivianTrackr_AI_Search {
                     }
                 });
                 
+                // If user pastes, mark as touched
                 apiKeyInput.on('paste', function() {
                     fieldTouched = true;
                 });
