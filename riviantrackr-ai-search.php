@@ -1,5 +1,4 @@
 <?php
-error_log('🔴 Plugin file loaded at ' . date('Y-m-d H:i:s'));
 declare(strict_types=1);
 /**
  * Plugin Name: RivianTrackr AI Search
