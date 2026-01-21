@@ -1253,11 +1253,6 @@ class RivianTrackr_AI_Search {
             return;
         }
 
-        // Add this to the top of your settings page temporarily
-        wp_cache_flush();
-        delete_option('rt_ai_search_options'); // Force delete the phantom
-        echo '<div class="notice notice-warning"><p>Cache flushed and option deleted. Refresh this page.</p></div>';
-
         global $wpdb;
         echo '<div class="notice notice-info">';
         echo '<h3>Database Configuration Debug</h3>';
