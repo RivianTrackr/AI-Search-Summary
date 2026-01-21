@@ -235,7 +235,7 @@ class RivianTrackr_AI_Search {
         $output['api_key']   = isset( $input['api_key'] ) ? trim( $input['api_key'] ) : '';
         $output['model']     = isset( $input['model'] ) ? sanitize_text_field( $input['model'] ) : 'gpt-4o-mini';  // Updated default
         $output['max_posts'] = isset( $input['max_posts'] ) ? max( 1, intval( $input['max_posts'] ) ) : 10;
-        $output['enable']    = ! empty( $input['enable'] ) ? 1 : 0;
+        $output['enable'] = isset( $input['enable'] ) && $input['enable'] ? 1 : 0;
         $output['max_calls_per_minute'] = isset( $input['max_calls_per_minute'] )
             ? max( 0, intval( $input['max_calls_per_minute'] ) )
             : 30;
