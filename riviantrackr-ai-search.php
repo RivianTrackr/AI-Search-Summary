@@ -210,9 +210,12 @@ class RivianTrackr_AI_Search {
         
         // Initialize plugin options if they don't exist
         $option_name = 'rt_ai_search_options';
-        $existing_options = get_option($option_name);
         
-        if (false === $existing_options) {
+        // CHANGE THIS LINE - use a unique string instead of checking false
+        $existing_options = get_option($option_name, 'DOES_NOT_EXIST');
+        
+        // CHANGE THIS CONDITION
+        if ($existing_options === 'DOES_NOT_EXIST') {
             $default_options = array(
                 'api_key'              => '',
                 'model'                => 'gpt-4o-mini',
@@ -223,23 +226,26 @@ class RivianTrackr_AI_Search {
                 'custom_css'           => '',
             );
             
-            // add_option() automatically uses the correct prefix
-            add_option($option_name, $default_options, '', 'yes');
-            error_log('[RivianTrackr AI Search] Plugin options initialized on activation');
+            $result = add_option($option_name, $default_options, '', 'yes');
+            error_log('[RivianTrackr AI Search] Activation - add_option result: ' . ($result ? 'SUCCESS' : 'FAILED'));
+            
+            // Verify it was created
+            $verify = get_option($option_name, 'STILL_MISSING');
+            error_log('[RivianTrackr AI Search] Activation - verification: ' . ($verify === 'STILL_MISSING' ? 'FAILED' : 'SUCCESS'));
+        } else {
+            error_log('[RivianTrackr AI Search] Activation - options already exist');
         }
         
         // Initialize cache namespace
         $cache_namespace_option = 'rt_ai_search_cache_namespace';
-        if (false === get_option($cache_namespace_option)) {
+        if (get_option($cache_namespace_option, 'DOES_NOT_EXIST') === 'DOES_NOT_EXIST') {
             add_option($cache_namespace_option, 1, '', 'yes');
-            error_log('[RivianTrackr AI Search] Cache namespace initialized');
         }
         
         // Initialize models cache
         $models_cache_option = 'rt_ai_search_models_cache';
-        if (false === get_option($models_cache_option)) {
+        if (get_option($models_cache_option, 'DOES_NOT_EXIST') === 'DOES_NOT_EXIST') {
             add_option($models_cache_option, array(), '', 'no');
-            error_log('[RivianTrackr AI Search] Models cache initialized');
         }
     }
 
@@ -324,16 +330,25 @@ class RivianTrackr_AI_Search {
             'custom_css'           => '',
         );
 
-        $opts = get_option($this->option_name, array());
+        // IMPORTANT: Use a unique string (not array) as default to detect non-existence
+        $opts = get_option($this->option_name, 'OPTION_DOES_NOT_EXIST');
         
-        // If get_option returned false (option doesn't exist), create it
-        if (false === $opts) {
-            add_option($this->option_name, $defaults, '', 'yes');
+        // Check if option doesn't exist
+        if ($opts === 'OPTION_DOES_NOT_EXIST') {
+            // Option doesn't exist - create it
+            error_log('[RivianTrackr AI Search] Option does not exist, creating it now');
+            $result = add_option($this->option_name, $defaults, '', 'yes');
+            error_log('[RivianTrackr AI Search] add_option result: ' . ($result ? 'SUCCESS' : 'FAILED'));
+            
             $opts = $defaults;
-            error_log('[RivianTrackr AI Search] Options created in get_options()');
+        } elseif (!is_array($opts)) {
+            // Option exists but has wrong format
+            error_log('[RivianTrackr AI Search] Option exists but is not an array, resetting');
+            update_option($this->option_name, $defaults);
+            $opts = $defaults;
         }
         
-        $this->options_cache = wp_parse_args(is_array($opts) ? $opts : array(), $defaults);
+        $this->options_cache = wp_parse_args($opts, $defaults);
         
         if (!empty($this->options_cache['api_key'])) {
             $this->options_cache['api_key'] = $this->decrypt_api_key($this->options_cache['api_key']);
@@ -1225,6 +1240,11 @@ class RivianTrackr_AI_Search {
         if ( ! current_user_can( 'manage_options' ) ) {
             return;
         }
+
+        // Add this to the top of your settings page temporarily
+        wp_cache_flush();
+        delete_option('rt_ai_search_options'); // Force delete the phantom
+        echo '<div class="notice notice-warning"><p>Cache flushed and option deleted. Refresh this page.</p></div>';
 
         global $wpdb;
         echo '<div class="notice notice-info">';
