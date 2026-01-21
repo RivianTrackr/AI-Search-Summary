@@ -4,13 +4,13 @@ declare(strict_types=1);
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add an OpenAI powered AI summary to WordPress search on RivianTrackr.com without delaying normal results, with analytics, cache control, and collapsible sources.
- * Version: 3.3.6
+ * Version: 3.3.7
  * Author URI: https://riviantrackr.com
  * Author: RivianTrackr
  * License: GPL v2 or later
  */
 
-define( 'RT_AI_SEARCH_VERSION', '3.3.6' );
+define( 'RT_AI_SEARCH_VERSION', '3.3.7' );
 define( 'RT_AI_SEARCH_MODELS_CACHE_TTL', 7 * DAY_IN_SECONDS );
 define( 'RT_AI_SEARCH_MIN_CACHE_TTL', 60 );
 define( 'RT_AI_SEARCH_MAX_CACHE_TTL', 86400 );
@@ -206,7 +206,37 @@ class RivianTrackr_AI_Search {
 
     public static function activate() {
         self::create_logs_table();
-        self::add_missing_indexes(); // Add indexes to existing tables
+        self::add_missing_indexes();
+        
+        $option_name = 'rt_ai_search_options';
+        $existing_options = get_option($option_name);
+        
+        if (false === $existing_options) {
+            $default_options = array(
+                'api_key'              => '',
+                'model'                => 'gpt-4o-mini',
+                'max_posts'            => 10,
+                'enable'               => 0,
+                'max_calls_per_minute' => 30,
+                'cache_ttl'            => RT_AI_SEARCH_DEFAULT_CACHE_TTL,
+                'custom_css'           => '',
+            );
+            
+            add_option($option_name, $default_options, '', 'yes');
+            error_log('[RivianTrackr AI Search] Plugin options initialized on activation');
+        }
+        
+        $cache_namespace_option = 'rt_ai_search_cache_namespace';
+        if (false === get_option($cache_namespace_option)) {
+            add_option($cache_namespace_option, 1, '', 'yes');
+            error_log('[RivianTrackr AI Search] Cache namespace initialized on activation');
+        }
+        
+        $models_cache_option = 'rt_ai_search_models_cache';
+        if (false === get_option($models_cache_option)) {
+            add_option($models_cache_option, array(), '', 'no');
+            error_log('[RivianTrackr AI Search] Models cache initialized on activation');
+        }
     }
 
     private function ensure_logs_table() {
@@ -291,6 +321,13 @@ class RivianTrackr_AI_Search {
         );
 
         $opts = get_option($this->option_name, array());
+        
+        if (false === $opts) {
+            add_option($this->option_name, $defaults, '', 'yes');
+            $opts = $defaults;
+            error_log('[RivianTrackr AI Search] Options created in get_options()');
+        }
+        
         $this->options_cache = wp_parse_args(is_array($opts) ? $opts : array(), $defaults);
         
         if (!empty($this->options_cache['api_key'])) {
@@ -306,11 +343,17 @@ class RivianTrackr_AI_Search {
         if (isset($input['api_key'])) {
             $api_key = trim($input['api_key']);
             
-            if (!empty($api_key)) {
+            if ($api_key === '••••••••••••••••••••••••') {
+                $existing = get_option($this->option_name, array());
+                $output['api_key'] = isset($existing['api_key']) ? $existing['api_key'] : '';
+            } elseif (!empty($api_key)) {
                 $output['api_key'] = $this->encrypt_api_key($api_key);
             } else {
                 $output['api_key'] = '';
             }
+        } else {
+            $existing = get_option($this->option_name, array());
+            $output['api_key'] = isset($existing['api_key']) ? $existing['api_key'] : '';
         }
         
         $output['model']     = isset($input['model']) ? sanitize_text_field($input['model']) : 'gpt-4o-mini';
