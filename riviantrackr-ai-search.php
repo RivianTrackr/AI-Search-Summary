@@ -346,7 +346,7 @@ class RivianTrackr_AI_Search {
                 'default' => array(
                     'api_key'              => '',
                     'model'                => 'gpt-4o-mini',
-                    'max_posts'            => 10,
+                    'max_posts'            => 20,
                     'enable'               => 0,
                     'max_calls_per_minute' => 30,
                     'cache_ttl'            => RT_AI_SEARCH_DEFAULT_CACHE_TTL,
@@ -1187,7 +1187,6 @@ class RivianTrackr_AI_Search {
                 </div>
             </div>
 
-            <!-- Notifications -->
             <?php if ( $refreshed ) : ?>
                 <div class="rt-ai-notice rt-ai-notice-success">
                     Model list refreshed from OpenAI.
@@ -1211,7 +1210,6 @@ class RivianTrackr_AI_Search {
             <form method="post" action="options.php">
                 <?php settings_fields( 'rt_ai_search_group' ); ?>
 
-                <!-- Section 1: Getting Started (Most Important) -->
                 <div class="rt-ai-section">
                     <div class="rt-ai-section-header">
                         <h2>Getting Started</h2>
@@ -1240,10 +1238,47 @@ class RivianTrackr_AI_Search {
                             </div>
                         </div>
 
+                        <!-- AI Provider Selection -->
+                        <div class="rt-ai-field">
+                            <div class="rt-ai-field-label">
+                                <label>AI Provider</label>
+                            </div>
+                            <div class="rt-ai-field-description">
+                                Choose your AI provider. Each has different models, pricing, and strengths.
+                            </div>
+                            <div class="rt-ai-field-input">
+                                <?php
+                                if ( class_exists( 'RT_AI_Provider_Factory' ) ) {
+                                    $providers = RT_AI_Provider_Factory::get_available_providers();
+                                    $current_provider = isset( $options['provider'] ) ? $options['provider'] : 'openai';
+                                    ?>
+                                    <select name="<?php echo esc_attr( $this->option_name ); ?>[provider]" 
+                                            id="rt-ai-provider-select"
+                                            style="min-width: 260px;">
+                                        <?php foreach ( $providers as $id => $name ) : ?>
+                                            <option value="<?php echo esc_attr( $id ); ?>" 
+                                                    <?php selected( $current_provider, $id ); ?>>
+                                                <?php echo esc_html( $name ); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <p class="description" style="margin-top: 8px;">
+                                        <strong>OpenAI:</strong> Industry standard<br>
+                                        <strong>Gemini:</strong> Best price-to-performance<br>
+                                        <strong>Claude:</strong> Superior reasoning
+                                    </p>
+                                    <?php
+                                } else {
+                                    echo '<p style="color: red;">⚠️ Provider classes not loaded.</p>';
+                                }
+                                ?>
+                            </div>
+                        </div>
+
                         <!-- API Key -->
                         <div class="rt-ai-field">
                             <div class="rt-ai-field-label">
-                                <label for="rt-ai-api-key">OpenAI API Key</label>
+                                <label for="rt-ai-api-key">API Key</label>
                                 <span class="rt-ai-field-required">Required</span>
                             </div>
                             <div class="rt-ai-field-description">
