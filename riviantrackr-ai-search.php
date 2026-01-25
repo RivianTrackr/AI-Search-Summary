@@ -3,14 +3,14 @@ declare(strict_types=1);
 /**
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
- * Description: Add an OpenAI powered AI summary to WordPress search on RivianTrackr.com without delaying normal results, with analytics, cache control, and collapsible sources.
- * Version: 3.3.7
+ * Description: Add AI-powered search summaries to WordPress search results using OpenAI (GPT), Google Gemini, or Anthropic Claude. Generates intelligent summaries without delaying search results, with built-in caching, rate limiting, and analytics. Choose your preferred AI provider and model for optimal performance and cost.
+ * Version: 3.4.0
  * Author URI: https://riviantrackr.com
- * Author: RivianTrackr
+ * Author: Jose Castillo
  * License: GPL v2 or later
  */
 
-define( 'RT_AI_SEARCH_VERSION', '3.3.7' );
+define( 'RT_AI_SEARCH_VERSION', '3.4.0' );
 define( 'RT_AI_SEARCH_MODELS_CACHE_TTL', 7 * DAY_IN_SECONDS );
 define( 'RT_AI_SEARCH_MIN_CACHE_TTL', 60 );
 define( 'RT_AI_SEARCH_MAX_CACHE_TTL', 86400 );
@@ -40,8 +40,10 @@ class RivianTrackr_AI_Search {
     private $options_cache      = null;
 
     public function __construct() {
+        $this->load_provider_classes();
         
         $this->cache_prefix = 'rt_ai_search_v' . str_replace( '.', '_', RT_AI_SEARCH_VERSION ) . '_';
+
         
         add_action( 'plugins_loaded', array( $this, 'register_settings' ), 1 );
         add_action( 'init', array( $this, 'register_settings' ), 1 );
@@ -57,6 +59,10 @@ class RivianTrackr_AI_Search {
         add_action( 'admin_print_styles-index.php', array( $this, 'enqueue_dashboard_widget_css' ) );
 
         add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), array( $this, 'add_plugin_settings_link' ) );
+    }
+
+    private function load_provider_classes() {
+        require_once plugin_dir_path( __FILE__ ) . 'includes/class-rt-ai-provider-factory.php';
     }
 
     public function force_register_if_needed() {
@@ -227,6 +233,7 @@ class RivianTrackr_AI_Search {
         }
 
         $defaults = array(
+            'provider'             => 'openai',  // NEW: Add this line
             'api_key'              => '',
             'model'                => 'gpt-4o-mini',
             'max_posts'            => 10,
@@ -244,7 +251,6 @@ class RivianTrackr_AI_Search {
 
     public function sanitize_options( $input ) {
         error_log('[RivianTrackr AI Search] sanitize_options() called');
-        error_log('[RivianTrackr AI Search] Input received: ' . print_r($input, true));
         
         if (!is_array($input)) {
             error_log('[RivianTrackr AI Search] WARNING: Input is not an array!');
@@ -252,6 +258,14 @@ class RivianTrackr_AI_Search {
         }
         
         $output = array();
+
+        // NEW: Sanitize provider selection
+        $output['provider'] = isset($input['provider']) ? sanitize_text_field($input['provider']) : 'openai';
+        
+        // Validate provider
+        if ( ! RT_AI_Provider_Factory::is_valid_provider( $output['provider'] ) ) {
+            $output['provider'] = 'openai';
+        }
 
         $output['api_key']   = isset($input['api_key']) ? trim($input['api_key']) : '';
         $output['model']     = isset($input['model']) ? sanitize_text_field($input['model']) : 'gpt-4o-mini';
@@ -278,8 +292,6 @@ class RivianTrackr_AI_Search {
         $output['custom_css'] = isset($input['custom_css']) ? wp_strip_all_tags($input['custom_css']) : '';
 
         $this->options_cache = null;
-        
-        error_log('[RivianTrackr AI Search] sanitize_options() output: ' . print_r($output, true));
         
         return $output;
     }
@@ -318,17 +330,14 @@ class RivianTrackr_AI_Search {
     }
 
     public function register_settings() {
-        // Prevent multiple registrations
         static $registered = false;
         if ($registered) {
             return;
         }
         $registered = true;
         
-        // Log that registration is happening
         error_log('[RivianTrackr AI Search] register_settings() executing at ' . current_time('mysql'));
         
-        // ALWAYS register the option itself - this is crucial
         register_setting(
             'rt_ai_search_group',
             $this->option_name,
@@ -347,7 +356,6 @@ class RivianTrackr_AI_Search {
             )
         );
         
-        // ONLY add settings sections/fields if the function exists (i.e., we're in admin)
         if (function_exists('add_settings_section')) {
             
             add_settings_section(
@@ -358,8 +366,16 @@ class RivianTrackr_AI_Search {
             );
 
             add_settings_field(
+                'provider',
+                'AI Provider',
+                array( $this, 'field_provider' ),
+                'rt-ai-search',
+                'rt_ai_search_main'
+            );
+
+            add_settings_field(
                 'api_key',
-                'OpenAI API Key',
+                'API Key',
                 array( $this, 'field_api_key' ),
                 'rt-ai-search',
                 'rt_ai_search_main'
@@ -449,17 +465,18 @@ class RivianTrackr_AI_Search {
             $(document).ready(function() {
                 var btn = $('#rt-ai-test-key-btn');
                 var apiKeyInput = $('#rt-ai-api-key');
+                var providerSelect = $('#rt-ai-provider-select');
                 var resultDiv = $('#rt-ai-test-result');
                 
                 btn.on('click', function() {
                     var apiKey = apiKeyInput.val().trim();
+                    var provider = providerSelect.val();
                     
                     if (!apiKey) {
                         resultDiv.html('<div class="rt-ai-test-result error"><p>Please enter an API key first.</p></div>');
                         return;
                     }
                     
-                    // Disable button and show loading
                     btn.prop('disabled', true).text('Testing...');
                     resultDiv.html('<div class="rt-ai-test-result info"><p>Testing API key...</p></div>');
                     
@@ -469,6 +486,7 @@ class RivianTrackr_AI_Search {
                         data: {
                             action: 'rt_ai_test_api_key',
                             api_key: apiKey,
+                            provider: provider,
                             nonce: '<?php echo wp_create_nonce( 'rt_ai_test_key' ); ?>'
                         },
                         success: function(response) {
@@ -478,7 +496,6 @@ class RivianTrackr_AI_Search {
                                 var msg = '<strong>✓ ' + response.data.message + '</strong>';
                                 if (response.data.model_count) {
                                     msg += '<br>Available models: ' + response.data.model_count;
-                                    msg += ' (Chat models: ' + response.data.chat_models + ')';
                                 }
                                 resultDiv.html('<div class="rt-ai-test-result success"><p>' + msg + '</p></div>');
                             } else {
@@ -579,21 +596,24 @@ class RivianTrackr_AI_Search {
     }
 
     public function ajax_test_api_key() {
-        // Check permissions
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( array( 'message' => 'Permission denied.' ) );
         }
 
-        // Verify nonce
         if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( $_POST['nonce'], 'rt_ai_test_key' ) ) {
             wp_send_json_error( array( 'message' => 'Invalid nonce.' ) );
         }
 
-        // Get API key from POST
         $api_key = isset( $_POST['api_key'] ) ? trim( $_POST['api_key'] ) : '';
+        $provider_id = isset( $_POST['provider'] ) ? sanitize_text_field( $_POST['provider'] ) : 'openai';
 
-        // Test the key
-        $result = $this->test_api_key( $api_key );
+        $provider = RT_AI_Provider_Factory::create( $provider_id, $api_key );
+        
+        if ( ! $provider ) {
+            wp_send_json_error( array( 'message' => 'Invalid provider selected.' ) );
+        }
+
+        $result = $provider->test_api_key();
 
         if ( $result['success'] ) {
             wp_send_json_success( $result );
@@ -604,7 +624,8 @@ class RivianTrackr_AI_Search {
 
     public function field_model() {
         $options = $this->get_options();
-        $models  = $this->get_available_models_for_dropdown( $options['api_key'] );
+        $provider_id = isset( $options['provider'] ) ? $options['provider'] : 'openai';
+        $models = $this->get_available_models_for_dropdown( $provider_id, $options['api_key'] );
 
         if ( ! empty( $options['model'] ) && ! in_array( $options['model'], $models, true ) ) {
             $models[] = $options['model'];
@@ -621,9 +642,22 @@ class RivianTrackr_AI_Search {
             <?php endforeach; ?>
         </select>
         <p class="description">
-            Pick the OpenAI model to use for AI search. 
-            <strong>Recommended: gpt-4o-mini</strong> (fastest & cheapest, ~2-3 seconds per summary).
-            Use the button below to refresh the list from OpenAI.
+            <?php
+            $provider_name = RT_AI_Provider_Factory::get_provider_name( $provider_id );
+            echo 'Select a model from ' . esc_html( $provider_name ) . '. ';
+            
+            switch ( $provider_id ) {
+                case 'openai':
+                    echo '<strong>Recommended: gpt-4o-mini</strong> (fastest & cheapest)';
+                    break;
+                case 'gemini':
+                    echo '<strong>Recommended: gemini-1.5-flash</strong> (fast & efficient)';
+                    break;
+                case 'claude':
+                    echo '<strong>Recommended: claude-3-5-haiku-20241022</strong> (fast & cost-effective)';
+                    break;
+            }
+            ?>
         </p>
         <?php
     }
@@ -641,14 +675,34 @@ class RivianTrackr_AI_Search {
         <?php
     }
 
-    public function field_enable() {
+    public function field_provider() {
         $options = $this->get_options();
+        $providers = RT_AI_Provider_Factory::get_available_providers();
         ?>
-        <label>
-            <input type="checkbox" name="<?php echo esc_attr( $this->option_name ); ?>[enable]"
-                   value="1" <?php checked( $options['enable'], 1 ); ?> />
-            Enable AI search summary
-        </label>
+        <select name="<?php echo esc_attr( $this->option_name ); ?>[provider]" 
+                id="rt-ai-provider-select"
+                style="min-width: 260px;">
+            <?php foreach ( $providers as $id => $name ) : ?>
+                <option value="<?php echo esc_attr( $id ); ?>" 
+                        <?php selected( $options['provider'], $id ); ?>>
+                    <?php echo esc_html( $name ); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description">
+            Choose your AI provider. Each provider has different models and pricing.
+            <br><strong>OpenAI:</strong> Best overall, fast, reliable
+            <br><strong>Gemini:</strong> Google's AI, good for variety
+            <br><strong>Claude:</strong> Anthropic's AI, excellent reasoning
+        </p>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            $('#rt-ai-provider-select').on('change', function() {
+                alert('Please save your settings to see models for the selected provider.');
+            });
+        });
+        </script>
         <?php
     }
 
@@ -949,34 +1003,18 @@ class RivianTrackr_AI_Search {
         return $models;
     }
 
-    private function get_available_models_for_dropdown( $api_key ) {
-        // Clean, curated default list - only chat completion models
-        $default_models = array(
-            'gpt-4o-mini',
-            'gpt-4o',
-            'gpt-4-turbo',
-            'gpt-4.1-mini',
-            'gpt-4.1-nano',
-            'gpt-4.1',
-            'gpt-4',
-            'gpt-3.5-turbo',
-            // Future models (base names only)
-            'gpt-5.2',
-            'gpt-5.1',
-            'gpt-5',
-            'gpt-5-mini',
-            'gpt-5-nano',
-        );
-
-        if ( empty( $api_key ) ) {
-            return $default_models;
+    private function get_available_models_for_dropdown( $provider_id, $api_key ) {
+        $provider = RT_AI_Provider_Factory::create( $provider_id, $api_key );
+        
+        if ( ! $provider ) {
+            return array( 'gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo' );
         }
 
-        $cache         = get_option( $this->models_cache_option );
+        $cache_key = 'rt_ai_models_cache_' . $provider_id;
+        $cache = get_option( $cache_key );
         $cached_models = ( is_array( $cache ) && ! empty( $cache['models'] ) ) ? $cache['models'] : array();
-        $updated_at    = ( is_array( $cache ) && ! empty( $cache['updated_at'] ) ) ? absint( $cache['updated_at'] ) : 0;
+        $updated_at = ( is_array( $cache ) && ! empty( $cache['updated_at'] ) ) ? absint( $cache['updated_at'] ) : 0;
 
-        // Use cached models if they exist and are still within TTL.
         if ( ! empty( $cached_models ) && $updated_at > 0 ) {
             $age = time() - $updated_at;
             if ( $age >= 0 && $age < RT_AI_SEARCH_MODELS_CACHE_TTL ) {
@@ -984,27 +1022,22 @@ class RivianTrackr_AI_Search {
             }
         }
 
-        // Cache is missing or stale, try to refresh from OpenAI.
-        $models = $this->fetch_models_from_openai( $api_key );
-
-        if ( ! empty( $models ) ) {
-            update_option(
-                $this->models_cache_option,
-                array(
-                    'models'     => $models,
-                    'updated_at' => time(),
-                )
-            );
-
-            return $models;
+        if ( ! empty( $api_key ) ) {
+            $models = $provider->fetch_models_from_api();
+            
+            if ( ! empty( $models ) ) {
+                update_option(
+                    $cache_key,
+                    array(
+                        'models' => $models,
+                        'updated_at' => time(),
+                    )
+                );
+                return $models;
+            }
         }
 
-        // If refresh failed, fall back to cached models if available, otherwise defaults.
-        if ( ! empty( $cached_models ) ) {
-            return $cached_models;
-        }
-
-        return $default_models;
+        return ! empty( $cached_models ) ? $cached_models : $provider->get_available_models();
     }
 
     private function refresh_model_cache( $api_key ) {
@@ -2598,22 +2631,26 @@ class RivianTrackr_AI_Search {
 
     private function get_ai_data_for_search( $search_query, $posts_for_ai, &$ai_error = '' ) {
         $options = $this->get_options();
+        
         if ( empty( $options['api_key'] ) || empty( $options['enable'] ) ) {
             $ai_error = 'AI search is not configured. Please contact the site administrator.';
             return null;
         }
 
+        $provider_id = isset( $options['provider'] ) ? $options['provider'] : 'openai';
+        
         $normalized_query = strtolower( trim( $search_query ) );
-        $namespace        = $this->get_cache_namespace();
+        $namespace = $this->get_cache_namespace();
         
         $cache_key_data = implode( '|', array(
+            $provider_id,
             $options['model'],
             $options['max_posts'],
             $normalized_query
         ) );
         
-        $cache_key        = $this->cache_prefix . 'ns' . $namespace . '_' . md5( $cache_key_data );
-        $cached_raw       = get_transient( $cache_key );
+        $cache_key = $this->cache_prefix . 'ns' . $namespace . '_' . md5( $cache_key_data );
+        $cached_raw = get_transient( $cache_key );
 
         if ( $cached_raw ) {
             $ai_data = json_decode( $cached_raw, true );
@@ -2627,72 +2664,39 @@ class RivianTrackr_AI_Search {
             return null;
         }
 
-        $api_response = $this->call_openai_for_search(
+        $provider = RT_AI_Provider_Factory::create(
+            $provider_id,
             $options['api_key'],
-            $options['model'],
-            $search_query,
-            $posts_for_ai
+            $options['model']
         );
 
-        if ( isset( $api_response['error'] ) ) {
-            $ai_error = 'OpenAI API error: ' . $api_response['error'];
+        if ( ! $provider ) {
+            $ai_error = 'Invalid AI provider configuration.';
             return null;
         }
 
-        if ( empty( $api_response['choices'][0]['message']['content'] ) ) {
-            $ai_error = 'OpenAI returned an empty response. Please try again.';
+        $result = $provider->generate_summary( $search_query, $posts_for_ai );
+
+        if ( isset( $result['error'] ) ) {
+            $ai_error = $result['error'];
             return null;
         }
 
-        $raw_content = $api_response['choices'][0]['message']['content'];
-
-        if ( is_array( $raw_content ) ) {
-            $decoded = $raw_content;
-        } else {
-            $decoded = json_decode( $raw_content, true );
-
-            if ( json_last_error() !== JSON_ERROR_NONE ) {
-                $first = strpos( $raw_content, '{' );
-                $last  = strrpos( $raw_content, '}' );
-                if ( $first !== false && $last !== false && $last > $first ) {
-                    $json_candidate = substr( $raw_content, $first, $last - $first + 1 );
-                    $decoded        = json_decode( $json_candidate, true );
-                }
-            }
+        if ( empty( $result['answer_html'] ) ) {
+            $result['answer_html'] = '<p>AI summary did not return a valid answer.</p>';
         }
 
-        if ( ! is_array( $decoded ) ) {
-            $ai_error = 'Could not parse AI response. The service may be experiencing issues.';
-            return null;
-        }
-
-        if ( isset( $decoded['answer_html'] ) && is_string( $decoded['answer_html'] ) ) {
-            $inner = trim( $decoded['answer_html'] );
-            if ( strlen( $inner ) > 0 && $inner[0] === '{' && strpos( $inner, '"answer_html"' ) !== false ) {
-                $inner_decoded = json_decode( $inner, true );
-                if ( json_last_error() === JSON_ERROR_NONE && is_array( $inner_decoded ) && isset( $inner_decoded['answer_html'] ) ) {
-                    $decoded = $inner_decoded;
-                }
-            }
-        }
-
-        if ( empty( $decoded['answer_html'] ) ) {
-            $decoded['answer_html'] = '<p>AI summary did not return a valid answer.</p>';
-        }
-
-        if ( empty( $decoded['results'] ) || ! is_array( $decoded['results'] ) ) {
-            $decoded['results'] = array();
+        if ( empty( $result['results'] ) || ! is_array( $result['results'] ) ) {
+            $result['results'] = array();
         }
 
         $ttl_option = isset( $options['cache_ttl'] ) ? (int) $options['cache_ttl'] : 0;
-        $ttl        = $ttl_option > 0 ? $ttl_option : $this->cache_ttl;
+        $ttl = $ttl_option > 0 ? $ttl_option : $this->cache_ttl;
+        set_transient( $cache_key, wp_json_encode( $result ), $ttl );
 
-        set_transient( $cache_key, wp_json_encode( $decoded ), $ttl );
-
-        return $decoded;
+        return $result;
     }
 
-    // Updated call_openai_for_search() with better error messages
     private function call_openai_for_search( $api_key, $model, $user_query, $posts ) {
         if ( empty( $api_key ) ) {
             return array( 'error' => 'API key is missing. Please configure the plugin settings.' );
