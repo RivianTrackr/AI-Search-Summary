@@ -32,7 +32,7 @@ class RT_AI_Provider_Factory {
      */
     public static function get_available_providers() {
         return array(
-            'openai' => 'OpenAI (GPT)',
+            'openai' => 'OpenAI (ChatGPT)',
             'gemini' => 'Google Gemini',
             'claude' => 'Anthropic Claude',
         );
