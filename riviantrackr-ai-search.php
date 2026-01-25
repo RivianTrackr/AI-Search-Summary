@@ -41,10 +41,9 @@ class RivianTrackr_AI_Search {
 
     public function __construct() {
         $this->load_provider_classes();
-        
+            
         $this->cache_prefix = 'rt_ai_search_v' . str_replace( '.', '_', RT_AI_SEARCH_VERSION ) . '_';
-
-        
+            
         add_action( 'plugins_loaded', array( $this, 'register_settings' ), 1 );
         add_action( 'init', array( $this, 'register_settings' ), 1 );
         add_action( 'admin_init', array( $this, 'register_settings' ), 1 );
@@ -595,6 +594,45 @@ class RivianTrackr_AI_Search {
         );
     }
 
+    /**
+     * Render AI provider selection field
+     */
+    public function field_provider() {
+        $options = $this->get_options();
+        $providers = RT_AI_Provider_Factory::get_available_providers();
+        ?>
+        <div class="rt-ai-field-input">
+            <select name="<?php echo esc_attr( $this->option_name ); ?>[provider]" 
+                    id="rt-ai-provider-select"
+                    style="min-width: 260px;">
+                <?php foreach ( $providers as $id => $name ) : ?>
+                    <option value="<?php echo esc_attr( $id ); ?>" 
+                            <?php selected( $options['provider'], $id ); ?>>
+                        <?php echo esc_html( $name ); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        
+        <p class="description">
+            Choose your AI provider. Each has different models, pricing, and strengths.
+            <br><strong>OpenAI (ChatGPT):</strong> Industry standard, most reliable
+            <br><strong>Google Gemini:</strong> Best price-to-performance ratio
+            <br><strong>Anthropic Claude:</strong> Superior reasoning capabilities
+        </p>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            $('#rt-ai-provider-select').on('change', function() {
+                // Show alert when provider changes
+                var providerName = $(this).find('option:selected').text();
+                alert('Provider changed to ' + providerName + '. Please save your settings to see available models for this provider.');
+            });
+        });
+        </script>
+        <?php
+    }
+
     public function ajax_test_api_key() {
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( array( 'message' => 'Permission denied.' ) );
@@ -672,37 +710,6 @@ class RivianTrackr_AI_Search {
             How many posts or pages to pass as context for each search. Default: 10. 
             More posts provide better context but increase API costs slightly.
         </p>
-        <?php
-    }
-
-    public function field_provider() {
-        $options = $this->get_options();
-        $providers = RT_AI_Provider_Factory::get_available_providers();
-        ?>
-        <select name="<?php echo esc_attr( $this->option_name ); ?>[provider]" 
-                id="rt-ai-provider-select"
-                style="min-width: 260px;">
-            <?php foreach ( $providers as $id => $name ) : ?>
-                <option value="<?php echo esc_attr( $id ); ?>" 
-                        <?php selected( $options['provider'], $id ); ?>>
-                    <?php echo esc_html( $name ); ?>
-                </option>
-            <?php endforeach; ?>
-        </select>
-        <p class="description">
-            Choose your AI provider. Each provider has different models and pricing.
-            <br><strong>OpenAI:</strong> Best overall, fast, reliable
-            <br><strong>Gemini:</strong> Google's AI, good for variety
-            <br><strong>Claude:</strong> Anthropic's AI, excellent reasoning
-        </p>
-        
-        <script>
-        jQuery(document).ready(function($) {
-            $('#rt-ai-provider-select').on('change', function() {
-                alert('Please save your settings to see models for the selected provider.');
-            });
-        });
-        </script>
         <?php
     }
 
