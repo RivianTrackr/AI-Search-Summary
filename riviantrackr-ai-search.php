@@ -3,14 +3,14 @@ declare(strict_types=1);
 /**
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
- * Description: Add AI-powered search summaries using OpenAI, Gemini, or Claude. Fast, cached, and analytics-enabled for optimal performance.
- * Version: 1.0.1
+ * Description: Add AI-powered search summaries using OpenAI ChatGPT. Fast, cached, and analytics-enabled for optimal performance.
+ * Version: 1.0.0
  * Author URI: https://riviantrackr.com
  * Author: Jose Castillo
  * License: GPL v2 or later
  */
 
-define( 'RT_AI_SEARCH_VERSION', '1.0.1' );
+define( 'RT_AI_SEARCH_VERSION', '1.0.0' );
 define( 'RT_AI_SEARCH_MODELS_CACHE_TTL', 7 * DAY_IN_SECONDS );
 define( 'RT_AI_SEARCH_MIN_CACHE_TTL', 60 );
 define( 'RT_AI_SEARCH_MAX_CACHE_TTL', 86400 );
@@ -330,16 +330,8 @@ class RivianTrackr_AI_Search {
         );
 
         add_settings_field(
-            'provider',
-            'AI Provider',
-            array( $this, 'field_provider' ),
-            'rt-ai-search',
-            'rt_ai_search_main'
-        );
-
-        add_settings_field(
             'api_key',
-            'API Key',
+            'OpenAI API Key',
             array( $this, 'field_api_key' ),
             'rt-ai-search',
             'rt_ai_search_main'
@@ -404,6 +396,9 @@ class RivianTrackr_AI_Search {
                value="<?php echo esc_attr( $options['api_key'] ); ?>"
                placeholder="sk-proj-..."
                autocomplete="off" />
+        <p class="description">
+            Enter your OpenAI API key. You can get one from <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a>
+        </p>
 
         <p>
             <button type="button" id="rt-ai-test-key-btn" class="button">Test Connection</button>
@@ -416,7 +411,6 @@ class RivianTrackr_AI_Search {
             $(function() {
                 var btn = $('#rt-ai-test-key-btn');
                 var apiKeyInput = $('#rt-ai-api-key');
-                var providerSelect = $('#rt-ai-provider-select');
                 var resultDiv = $('#rt-ai-test-result');
 
                 function showNotice(type, html) {
@@ -428,7 +422,6 @@ class RivianTrackr_AI_Search {
 
                 btn.on('click', function() {
                     var apiKey = (apiKeyInput.val() || '').trim();
-                    var provider = providerSelect.length ? providerSelect.val() : 'openai';
 
                     if (!apiKey) {
                         showNotice('error', 'Please enter an API key first.');
@@ -444,7 +437,7 @@ class RivianTrackr_AI_Search {
                         data: {
                             action: 'rt_ai_test_api_key',
                             api_key: apiKey,
-                            provider: provider,
+                            provider: 'openai',
                             nonce: '<?php echo wp_create_nonce( 'rt_ai_test_key' ); ?>'
                         }
                     }).done(function(response) {
@@ -563,21 +556,6 @@ class RivianTrackr_AI_Search {
         );
     }
 
-    public function field_provider() {
-        $options   = $this->get_options();
-        $providers = RT_AI_Provider_Factory::get_available_providers();
-        ?>
-        <select name="<?php echo esc_attr( $this->option_name ); ?>[provider]" id="rt-ai-provider-select">
-            <?php foreach ( $providers as $id => $name ) : ?>
-                <option value="<?php echo esc_attr( $id ); ?>" <?php selected( $options['provider'], $id ); ?>>
-                    <?php echo esc_html( $name ); ?>
-                </option>
-            <?php endforeach; ?>
-        </select>
-        <p class="description">Choose which AI provider to use for summaries.</p>
-        <?php
-    }
-
     public function ajax_test_api_key() {
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_send_json_error( array( 'message' => 'Permission denied.' ) );
@@ -607,8 +585,7 @@ class RivianTrackr_AI_Search {
 
     public function field_model() {
         $options = $this->get_options();
-        $provider_id = isset( $options['provider'] ) ? $options['provider'] : 'openai';
-        $models = $this->get_available_models_for_dropdown( $provider_id, $options['api_key'] );
+        $models = $this->get_available_models_for_dropdown( 'openai', $options['api_key'] );
 
         if ( ! empty( $options['model'] ) && ! in_array( $options['model'], $models, true ) ) {
             $models[] = $options['model'];
@@ -625,10 +602,7 @@ class RivianTrackr_AI_Search {
             <?php endforeach; ?>
         </select>
         <p class="description">
-            <?php
-            $provider_name = RT_AI_Provider_Factory::get_provider_name( $provider_id );
-            echo 'Select a model from ' . esc_html( $provider_name ) . '. ';
-            ?>
+            Select an OpenAI model. We recommend gpt-4o-mini for best balance of speed and quality.
         </p>
         <?php
     }
@@ -2048,13 +2022,11 @@ class RivianTrackr_AI_Search {
             return null;
         }
 
-        $provider_id = isset( $options['provider'] ) ? $options['provider'] : 'openai';
-        
         $normalized_query = strtolower( trim( $search_query ) );
         $namespace = $this->get_cache_namespace();
         
         $cache_key_data = implode( '|', array(
-            $provider_id,
+            'openai',
             $options['model'],
             $options['max_posts'],
             $normalized_query
@@ -2076,7 +2048,7 @@ class RivianTrackr_AI_Search {
         }
 
         $provider = RT_AI_Provider_Factory::create(
-            $provider_id,
+            'openai',
             $options['api_key'],
             $options['model']
         );
