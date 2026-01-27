@@ -51,6 +51,7 @@ class RivianTrackr_AI_Search {
         add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_frontend_assets' ) );
         add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
         add_action( 'wp_ajax_rt_ai_test_api_key', array( $this, 'ajax_test_api_key' ) );
+        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
 
         add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), array( $this, 'add_plugin_settings_link' ) );
     }
@@ -225,7 +226,7 @@ class RivianTrackr_AI_Search {
         $output['provider'] = 'openai';
 
         $output['api_key']   = isset( $input['api_key'] ) ? trim( $input['api_key'] ) : '';
-        $output['model']     = isset( $input['model'] ) ? sanitize_text_field( $input['model'] ) : 'gpt-4o-mini';
+        $output['model']     = isset( $input['model'] ) ? sanitize_text_field( $input['model'] ) : '';
         $output['max_posts'] = isset( $input['max_posts'] ) ? max( 1, intval( $input['max_posts'] ) ) : 20;
         
         $output['enable'] = isset( $input['enable'] ) && $input['enable'] ? 1 : 0;
@@ -296,7 +297,7 @@ class RivianTrackr_AI_Search {
                 'default' => array(
                     'provider'             => 'openai',
                     'api_key'              => '',
-                    'model'                => 'gpt-4o-mini',
+                    'model'                => '',
                     'max_posts'            => 20,
                     'enable'               => 0,
                     'max_calls_per_minute' => 30,
@@ -1578,6 +1579,126 @@ class RivianTrackr_AI_Search {
             </div>
         </div>
         <?php
+    }
+
+    public function enqueue_admin_assets() {
+        $screen = get_current_screen();
+        
+        // Only load on dashboard
+        if ( ! $screen || $screen->id !== 'dashboard' ) {
+            return;
+        }
+
+        // Add inline CSS for dashboard widget
+        $widget_css = "
+            .rt-ai-widget-container {
+                margin: -12px;
+            }
+            .rt-ai-widget-stats-grid {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 12px;
+                padding: 16px;
+                background: #f9f9f9;
+                border-bottom: 1px solid #ddd;
+            }
+            .rt-ai-widget-stat {
+                text-align: center;
+            }
+            .rt-ai-widget-stat-value {
+                display: block;
+                font-size: 24px;
+                font-weight: 600;
+                color: #2271b1;
+                line-height: 1.2;
+            }
+            .rt-ai-widget-stat-label {
+                display: block;
+                font-size: 12px;
+                color: #646970;
+                margin-top: 4px;
+            }
+            .rt-ai-widget-section {
+                padding: 16px;
+            }
+            .rt-ai-widget-section-title {
+                margin: 0 0 12px 0;
+                font-size: 14px;
+                font-weight: 600;
+                color: #1d2327;
+            }
+            .rt-ai-widget-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            .rt-ai-widget-table thead th {
+                text-align: left;
+                padding: 8px 8px;
+                font-size: 12px;
+                font-weight: 600;
+                color: #646970;
+                border-bottom: 1px solid #ddd;
+            }
+            .rt-ai-widget-table tbody td {
+                padding: 8px 8px;
+                font-size: 13px;
+                border-bottom: 1px solid #f0f0f1;
+            }
+            .rt-ai-widget-table tbody tr:last-child td {
+                border-bottom: none;
+            }
+            .rt-ai-widget-query {
+                color: #1d2327;
+                font-weight: 500;
+            }
+            .rt-ai-widget-count {
+                color: #646970;
+                font-weight: 500;
+            }
+            .rt-ai-widget-badge {
+                display: inline-block;
+                padding: 2px 8px;
+                border-radius: 3px;
+                font-size: 11px;
+                font-weight: 600;
+            }
+            .rt-ai-widget-badge-success {
+                background: #d1f4e0;
+                color: #00753e;
+            }
+            .rt-ai-widget-badge-warning {
+                background: #fcf3cd;
+                color: #997404;
+            }
+            .rt-ai-widget-badge-error {
+                background: #fce8e8;
+                color: #d63638;
+            }
+            .rt-ai-widget-empty {
+                padding: 20px;
+                text-align: center;
+                color: #646970;
+                font-size: 13px;
+            }
+            .rt-ai-widget-footer {
+                padding: 12px 16px;
+                border-top: 1px solid #ddd;
+                background: #f9f9f9;
+                text-align: center;
+            }
+            .rt-ai-widget-link {
+                color: #2271b1;
+                text-decoration: none;
+                font-size: 13px;
+                font-weight: 500;
+            }
+            .rt-ai-widget-link:hover {
+                color: #135e96;
+                text-decoration: underline;
+            }
+        ";
+        
+        wp_add_inline_style( 'dashboard', $widget_css );
     }
 
     public function enqueue_frontend_assets() {
