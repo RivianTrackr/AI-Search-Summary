@@ -54,8 +54,6 @@ class RivianTrackr_AI_Search {
         add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_frontend_assets' ) );
         add_action( 'rest_api_init', array( $this, 'register_rest_routes' ) );
         add_action( 'wp_ajax_rt_ai_test_api_key', array( $this, 'ajax_test_api_key' ) );
-        add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
-        add_action( 'admin_print_styles-index.php', array( $this, 'enqueue_dashboard_widget_css' ) );
 
         add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), array( $this, 'add_plugin_settings_link' ) );
     }
@@ -78,15 +76,6 @@ class RivianTrackr_AI_Search {
         $settings_link = '<a href="' . esc_url( $url ) . '">Settings</a>';
         array_unshift( $links, $settings_link );
         return $links;
-    }
-
-    public function enqueue_dashboard_widget_css() {
-        wp_enqueue_style(
-            'rt-ai-search-admin',
-            plugin_dir_url( __FILE__ ) . 'assets/rt-ai-search-admin.css',
-            array(),
-            RT_AI_SEARCH_VERSION
-        );
     }
 
     private static function get_logs_table_name() {
@@ -229,7 +218,7 @@ class RivianTrackr_AI_Search {
             'provider'             => 'openai',
             'api_key'              => '',
             'model'                => '',
-            'max_posts'            => 10,
+            'max_posts'            => 20,
             'enable'               => 0,
             'max_calls_per_minute' => 30,
             'cache_ttl'            => RT_AI_SEARCH_DEFAULT_CACHE_TTL,
@@ -260,7 +249,7 @@ class RivianTrackr_AI_Search {
 
         $output['api_key']   = isset($input['api_key']) ? trim($input['api_key']) : '';
         $output['model']     = isset($input['model']) ? sanitize_text_field($input['model']) : 'gpt-4o-mini';
-        $output['max_posts'] = isset($input['max_posts']) ? max(1, intval($input['max_posts'])) : 10;
+        $output['max_posts'] = isset($input['max_posts']) ? max(1, intval($input['max_posts'])) : 20;
         
         $output['enable'] = isset($input['enable']) && $input['enable'] ? 1 : 0;
         
@@ -2201,30 +2190,6 @@ class RivianTrackr_AI_Search {
         <?php
     }
 
-    public function enqueue_admin_assets( $hook ) {
-        $allowed_hooks = array(
-            'toplevel_page_rt-ai-search-settings',
-            'ai-search_page_rt-ai-search-analytics',
-            'riviantrackr-ai-search_page_rt-ai-search-analytics',
-        );
-        
-        $is_our_page = in_array( $hook, $allowed_hooks, true ) || 
-                       strpos( $hook, 'rt-ai-search' ) !== false;
-        
-        if ( ! $is_our_page ) {
-            return;
-        }
-
-        $version = RT_AI_SEARCH_VERSION;
-
-        wp_enqueue_style(
-            'rt-ai-search-admin',
-            plugin_dir_url( __FILE__ ) . 'assets/rt-ai-search-admin.css',
-            array(),
-            $version
-        );
-    }
-
     private function is_likely_bot() {
         if ( ! isset( $_SERVER['HTTP_USER_AGENT'] ) ) {
             return true; // No user agent = suspicious
@@ -2446,7 +2411,7 @@ class RivianTrackr_AI_Search {
 
         $max_posts = (int) $options['max_posts'];
         if ( $max_posts < 1 ) {
-            $max_posts = 10;
+            $max_posts = 20;
         }
 
         $post_type = 'any';
