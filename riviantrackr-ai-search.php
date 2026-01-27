@@ -55,10 +55,6 @@ class RivianTrackr_AI_Search {
         add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), array( $this, 'add_plugin_settings_link' ) );
     }
 
-    private function load_provider_classes() {
-        require_once plugin_dir_path( __FILE__ ) . 'includes/class-rt-ai-provider-factory.php';
-    }
-
     public function add_plugin_settings_link( $links ) {
         $url = admin_url( 'admin.php?page=rt-ai-search-settings' );
         $settings_link = '<a href="' . esc_url( $url ) . '">Settings</a>';
@@ -714,13 +710,24 @@ class RivianTrackr_AI_Search {
     }
 
     private function get_available_models_for_dropdown( $provider_id, $api_key ) {
-        $provider = RT_AI_Provider_Factory::create( $provider_id, $api_key );
-        
-        if ( ! $provider ) {
-            return array( 'gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo' );
-        }
+        // Default models
+        $default_models = array(
+            'gpt-4o-mini',
+            'gpt-4o',
+            'gpt-4-turbo',
+            'gpt-4.1-mini',
+            'gpt-4.1-nano',
+            'gpt-4.1',
+            'gpt-4',
+            'gpt-3.5-turbo',
+            'gpt-5.2',
+            'gpt-5.1',
+            'gpt-5',
+            'gpt-5-mini',
+            'gpt-5-nano',
+        );
 
-        $cache_key = 'rt_ai_models_cache_' . $provider_id;
+        $cache_key = 'rt_ai_models_cache_openai';
         $cache = get_option( $cache_key );
         $cached_models = ( is_array( $cache ) && ! empty( $cache['models'] ) ) ? $cache['models'] : array();
         $updated_at = ( is_array( $cache ) && ! empty( $cache['updated_at'] ) ) ? absint( $cache['updated_at'] ) : 0;
@@ -733,7 +740,7 @@ class RivianTrackr_AI_Search {
         }
 
         if ( ! empty( $api_key ) ) {
-            $models = $provider->fetch_models_from_api();
+            $models = $this->fetch_models_from_openai( $api_key );
             
             if ( ! empty( $models ) ) {
                 update_option(
@@ -747,7 +754,7 @@ class RivianTrackr_AI_Search {
             }
         }
 
-        return ! empty( $cached_models ) ? $cached_models : $provider->get_available_models();
+        return ! empty( $cached_models ) ? $cached_models : $default_models;
     }
 
     private function refresh_model_cache( $api_key ) {
