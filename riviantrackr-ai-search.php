@@ -4,7 +4,7 @@ declare(strict_types=1);
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add AI-powered search summaries using OpenAI, Gemini, or Claude. Fast, cached, and analytics-enabled for optimal performance.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author URI: https://riviantrackr.com
  * Author: Jose Castillo
  * License: GPL v2 or later
@@ -297,6 +297,7 @@ class RivianTrackr_AI_Search {
     }
 
     public function register_settings() {
+        // Register the setting itself (this can happen early)
         register_setting(
             'rt_ai_search_group',
             $this->option_name,
@@ -315,6 +316,11 @@ class RivianTrackr_AI_Search {
                 )
             )
         );
+        
+        // Only register sections and fields when the functions are available (admin_init)
+        if ( ! function_exists( 'add_settings_section' ) ) {
+            return;
+        }
         
         add_settings_section(
             'rt_ai_search_main',
