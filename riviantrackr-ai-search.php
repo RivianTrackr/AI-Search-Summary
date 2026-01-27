@@ -4,13 +4,13 @@ declare(strict_types=1);
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add AI-powered search summaries using OpenAI, Gemini, or Claude. Fast, cached, and analytics-enabled for optimal performance.
- * Version: 1.0.1
+ * Version: 1.0.0
  * Author URI: https://riviantrackr.com
  * Author: Jose Castillo
  * License: GPL v2 or later
  */
 
-define( 'RT_AI_SEARCH_VERSION', '1.0.1' );
+define( 'RT_AI_SEARCH_VERSION', '1.0.0' );
 define( 'RT_AI_SEARCH_MODELS_CACHE_TTL', 7 * DAY_IN_SECONDS );
 define( 'RT_AI_SEARCH_MIN_CACHE_TTL', 60 );
 define( 'RT_AI_SEARCH_MAX_CACHE_TTL', 86400 );
@@ -47,7 +47,6 @@ class RivianTrackr_AI_Search {
         add_action( 'plugins_loaded', array( $this, 'register_settings' ), 1 );
         add_action( 'init', array( $this, 'register_settings' ), 1 );
         add_action( 'admin_init', array( $this, 'register_settings' ), 1 );
-        add_action( 'admin_head', array( $this, 'force_register_if_needed' ) );
         add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
         add_action( 'wp_dashboard_setup', array( $this, 'register_dashboard_widget' ) );
         add_action( 'loop_start', array( $this, 'inject_ai_summary_placeholder' ) );
@@ -60,15 +59,6 @@ class RivianTrackr_AI_Search {
 
     private function load_provider_classes() {
         require_once plugin_dir_path( __FILE__ ) . 'includes/class-rt-ai-provider-factory.php';
-    }
-
-    public function force_register_if_needed() {
-        global $wp_registered_settings;
-        
-        if (!isset($wp_registered_settings[$this->option_name])) {
-            error_log('[RivianTrackr AI Search] FORCING registration - option was not registered!');
-            $this->register_settings();
-        }
     }
 
     public function add_plugin_settings_link( $links ) {
@@ -232,36 +222,33 @@ class RivianTrackr_AI_Search {
     }
 
     public function sanitize_options( $input ) {
-        error_log('[RivianTrackr AI Search] sanitize_options() called');
-        
-        if (!is_array($input)) {
-            error_log('[RivianTrackr AI Search] WARNING: Input is not an array!');
+        if ( ! is_array( $input ) ) {
             $input = array();
         }
         
         $output = array();
 
-        $output['provider'] = isset($input['provider']) ? sanitize_text_field($input['provider']) : 'openai';
+        $output['provider'] = isset( $input['provider'] ) ? sanitize_text_field( $input['provider'] ) : 'openai';
         
         if ( ! RT_AI_Provider_Factory::is_valid_provider( $output['provider'] ) ) {
             $output['provider'] = 'openai';
         }
 
-        $output['api_key']   = isset($input['api_key']) ? trim($input['api_key']) : '';
-        $output['model']     = isset($input['model']) ? sanitize_text_field($input['model']) : 'gpt-4o-mini';
-        $output['max_posts'] = isset($input['max_posts']) ? max(1, intval($input['max_posts'])) : 20;
+        $output['api_key']   = isset( $input['api_key'] ) ? trim( $input['api_key'] ) : '';
+        $output['model']     = isset( $input['model'] ) ? sanitize_text_field( $input['model'] ) : 'gpt-4o-mini';
+        $output['max_posts'] = isset( $input['max_posts'] ) ? max( 1, intval( $input['max_posts'] ) ) : 20;
         
-        $output['enable'] = isset($input['enable']) && $input['enable'] ? 1 : 0;
+        $output['enable'] = isset( $input['enable'] ) && $input['enable'] ? 1 : 0;
         
-        $output['max_calls_per_minute'] = isset($input['max_calls_per_minute'])
-            ? max(0, intval($input['max_calls_per_minute']))
+        $output['max_calls_per_minute'] = isset( $input['max_calls_per_minute'] )
+            ? max( 0, intval( $input['max_calls_per_minute'] ) )
             : 30;
             
-        if (isset($input['cache_ttl'])) {
-            $ttl = intval($input['cache_ttl']);
-            if ($ttl < RT_AI_SEARCH_MIN_CACHE_TTL) {
+        if ( isset( $input['cache_ttl'] ) ) {
+            $ttl = intval( $input['cache_ttl'] );
+            if ( $ttl < RT_AI_SEARCH_MIN_CACHE_TTL ) {
                 $ttl = RT_AI_SEARCH_MIN_CACHE_TTL;
-            } elseif ($ttl > RT_AI_SEARCH_MAX_CACHE_TTL) {
+            } elseif ( $ttl > RT_AI_SEARCH_MAX_CACHE_TTL ) {
                 $ttl = RT_AI_SEARCH_MAX_CACHE_TTL;
             }
             $output['cache_ttl'] = $ttl;
@@ -269,7 +256,7 @@ class RivianTrackr_AI_Search {
             $output['cache_ttl'] = RT_AI_SEARCH_DEFAULT_CACHE_TTL;
         }
         
-        $output['custom_css'] = isset($input['custom_css']) ? wp_strip_all_tags($input['custom_css']) : '';
+        $output['custom_css'] = isset( $input['custom_css'] ) ? wp_strip_all_tags( $input['custom_css'] ) : '';
 
         $this->options_cache = null;
         
@@ -310,14 +297,6 @@ class RivianTrackr_AI_Search {
     }
 
     public function register_settings() {
-        static $registered = false;
-        if ($registered) {
-            return;
-        }
-        $registered = true;
-        
-        error_log('[RivianTrackr AI Search] register_settings() executing at ' . current_time('mysql'));
-        
         register_setting(
             'rt_ai_search_group',
             $this->option_name,
@@ -325,6 +304,7 @@ class RivianTrackr_AI_Search {
                 'type' => 'array',
                 'sanitize_callback' => array( $this, 'sanitize_options' ),
                 'default' => array(
+                    'provider'             => 'openai',
                     'api_key'              => '',
                     'model'                => 'gpt-4o-mini',
                     'max_posts'            => 20,
@@ -336,81 +316,76 @@ class RivianTrackr_AI_Search {
             )
         );
         
-        if (function_exists('add_settings_section')) {
-            
-            add_settings_section(
-                'rt_ai_search_main',
-                'AI Search Settings',
-                '__return_false',
-                'rt-ai-search'
-            );
+        add_settings_section(
+            'rt_ai_search_main',
+            'AI Search Settings',
+            '__return_false',
+            'rt-ai-search'
+        );
 
-            add_settings_field(
-                'provider',
-                'AI Provider',
-                array( $this, 'field_provider' ),
-                'rt-ai-search',
-                'rt_ai_search_main'
-            );
+        add_settings_field(
+            'provider',
+            'AI Provider',
+            array( $this, 'field_provider' ),
+            'rt-ai-search',
+            'rt_ai_search_main'
+        );
 
-            add_settings_field(
-                'api_key',
-                'API Key',
-                array( $this, 'field_api_key' ),
-                'rt-ai-search',
-                'rt_ai_search_main'
-            );
+        add_settings_field(
+            'api_key',
+            'API Key',
+            array( $this, 'field_api_key' ),
+            'rt-ai-search',
+            'rt_ai_search_main'
+        );
 
-            add_settings_field(
-                'model',
-                'Model',
-                array( $this, 'field_model' ),
-                'rt-ai-search',
-                'rt_ai_search_main'
-            );
+        add_settings_field(
+            'model',
+            'Model',
+            array( $this, 'field_model' ),
+            'rt-ai-search',
+            'rt_ai_search_main'
+        );
 
-            add_settings_field(
-                'max_posts',
-                'Maximum posts to send to OpenAI',
-                array( $this, 'field_max_posts' ),
-                'rt-ai-search',
-                'rt_ai_search_main'
-            );
+        add_settings_field(
+            'max_posts',
+            'Maximum posts to send to AI',
+            array( $this, 'field_max_posts' ),
+            'rt-ai-search',
+            'rt_ai_search_main'
+        );
 
-            add_settings_field(
-                'enable',
-                'Enable AI search summary',
-                array( $this, 'field_enable' ),
-                'rt-ai-search',
-                'rt_ai_search_main'
-            );
+        add_settings_field(
+            'enable',
+            'Enable AI search summary',
+            array( $this, 'field_enable' ),
+            'rt-ai-search',
+            'rt_ai_search_main'
+        );
 
-            add_settings_field(
-                'max_calls_per_minute',
-                'Max AI calls per minute',
-                array( $this, 'field_max_calls_per_minute' ),
-                'rt-ai-search',
-                'rt_ai_search_main'
-            );
+        add_settings_field(
+            'max_calls_per_minute',
+            'Max AI calls per minute',
+            array( $this, 'field_max_calls_per_minute' ),
+            'rt-ai-search',
+            'rt_ai_search_main'
+        );
 
-            add_settings_field(
-                'cache_ttl',
-                'AI cache lifetime (seconds)',
-                array( $this, 'field_cache_ttl' ),
-                'rt-ai-search',
-                'rt_ai_search_main'
-            );
+        add_settings_field(
+            'cache_ttl',
+            'AI cache lifetime (seconds)',
+            array( $this, 'field_cache_ttl' ),
+            'rt-ai-search',
+            'rt_ai_search_main'
+        );
 
-            add_settings_field(
-                'custom_css',
-                'Custom CSS',
-                array( $this, 'field_custom_css' ),
-                'rt-ai-search',
-                'rt_ai_search_main'
-            );
-        }
-        
-        error_log('[RivianTrackr AI Search] register_settings() completed');
+        add_settings_field(
+            'custom_css',
+            'Custom CSS',
+            array( $this, 'field_custom_css' ),
+            'rt-ai-search',
+            'rt_ai_search_main'
+        );
     }
 
     public function field_api_key() {
