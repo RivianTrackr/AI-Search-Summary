@@ -3,7 +3,7 @@ declare(strict_types=1);
 /**
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
- * Description: Add AI-powered search summaries using OpenAI ChatGPT. Fast, cached, and analytics-enabled for optimal performance.
+ * Description: Description: Add AI-powered search summaries using OpenAI ChatGPT. Fast, cached, and analytics-enabled for optimal performance.
  * Version: 1.0.0
  * Author URI: https://riviantrackr.com
  * Author: Jose Castillo
@@ -40,8 +40,6 @@ class RivianTrackr_AI_Search {
     private $options_cache      = null;
 
     public function __construct() {
-        $this->load_provider_classes();
-            
         $this->cache_prefix = 'rt_ai_search_v' . str_replace( '.', '_', RT_AI_SEARCH_VERSION ) . '_';
             
         add_action( 'plugins_loaded', array( $this, 'register_settings' ), 1 );
@@ -228,11 +226,7 @@ class RivianTrackr_AI_Search {
         
         $output = array();
 
-        $output['provider'] = isset( $input['provider'] ) ? sanitize_text_field( $input['provider'] ) : 'openai';
-        
-        if ( ! RT_AI_Provider_Factory::is_valid_provider( $output['provider'] ) ) {
-            $output['provider'] = 'openai';
-        }
+        $output['provider'] = 'openai';
 
         $output['api_key']   = isset( $input['api_key'] ) ? trim( $input['api_key'] ) : '';
         $output['model']     = isset( $input['model'] ) ? sanitize_text_field( $input['model'] ) : 'gpt-4o-mini';
@@ -297,7 +291,6 @@ class RivianTrackr_AI_Search {
     }
 
     public function register_settings() {
-        // Register the setting itself (this can happen early)
         register_setting(
             'rt_ai_search_group',
             $this->option_name,
@@ -396,8 +389,7 @@ class RivianTrackr_AI_Search {
                value="<?php echo esc_attr( $options['api_key'] ); ?>"
                placeholder="sk-proj-..."
                autocomplete="off" />
-        <p class="description">
-            Enter your OpenAI API key. You can get one from <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a>
+        <p class="description">Enter your OpenAI API key. You can get one from <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a>
         </p>
 
         <p>
@@ -566,15 +558,8 @@ class RivianTrackr_AI_Search {
         }
 
         $api_key = isset( $_POST['api_key'] ) ? trim( $_POST['api_key'] ) : '';
-        $provider_id = isset( $_POST['provider'] ) ? sanitize_text_field( $_POST['provider'] ) : 'openai';
 
-        $provider = RT_AI_Provider_Factory::create( $provider_id, $api_key );
-        
-        if ( ! $provider ) {
-            wp_send_json_error( array( 'message' => 'Invalid provider selected.' ) );
-        }
-
-        $result = $provider->test_api_key();
+        $result = $this->test_api_key( $api_key );
 
         if ( $result['success'] ) {
             wp_send_json_success( $result );
@@ -601,9 +586,6 @@ class RivianTrackr_AI_Search {
                 </option>
             <?php endforeach; ?>
         </select>
-        <p class="description">
-            Select an OpenAI model. We recommend gpt-4o-mini for best balance of speed and quality.
-        </p>
         <?php
     }
 
@@ -2047,37 +2029,38 @@ class RivianTrackr_AI_Search {
             return null;
         }
 
-        $provider = RT_AI_Provider_Factory::create(
-            'openai',
+        $result = $this->call_openai_for_search(
             $options['api_key'],
-            $options['model']
+            $options['model'],
+            $search_query,
+            $posts_for_ai
         );
-
-        if ( ! $provider ) {
-            $ai_error = 'Invalid AI provider configuration.';
-            return null;
-        }
-
-        $result = $provider->generate_summary( $search_query, $posts_for_ai );
 
         if ( isset( $result['error'] ) ) {
             $ai_error = $result['error'];
             return null;
         }
 
-        if ( empty( $result['answer_html'] ) ) {
-            $result['answer_html'] = '<p>AI summary did not return a valid answer.</p>';
+        $ai_data = $this->parse_openai_response( $result );
+
+        if ( isset( $ai_data['error'] ) ) {
+            $ai_error = $ai_data['error'];
+            return null;
         }
 
-        if ( empty( $result['results'] ) || ! is_array( $result['results'] ) ) {
-            $result['results'] = array();
+        if ( empty( $ai_data['answer_html'] ) ) {
+            $ai_data['answer_html'] = '<p>AI summary did not return a valid answer.</p>';
+        }
+
+        if ( empty( $ai_data['results'] ) || ! is_array( $ai_data['results'] ) ) {
+            $ai_data['results'] = array();
         }
 
         $ttl_option = isset( $options['cache_ttl'] ) ? (int) $options['cache_ttl'] : 0;
         $ttl = $ttl_option > 0 ? $ttl_option : $this->cache_ttl;
-        set_transient( $cache_key, wp_json_encode( $result ), $ttl );
+        set_transient( $cache_key, wp_json_encode( $ai_data ), $ttl );
 
-        return $result;
+        return $ai_data;
     }
 
     private function call_openai_for_search( $api_key, $model, $user_query, $posts ) {
@@ -2212,6 +2195,53 @@ class RivianTrackr_AI_Search {
         if ( json_last_error() !== JSON_ERROR_NONE ) {
             error_log( '[RivianTrackr AI Search] Failed to decode OpenAI response: ' . json_last_error_msg() );
             return array( 'error' => 'Could not understand AI response. Please try again.' );
+        }
+
+        return $decoded;
+    }
+
+    private function parse_openai_response( $api_response ) {
+        if ( empty( $api_response['choices'][0]['message']['content'] ) ) {
+            return array( 'error' => 'OpenAI returned an empty response. Please try again.' );
+        }
+
+        $raw_content = $api_response['choices'][0]['message']['content'];
+
+        if ( is_array( $raw_content ) ) {
+            $decoded = $raw_content;
+        } else {
+            $decoded = json_decode( $raw_content, true );
+
+            if ( json_last_error() !== JSON_ERROR_NONE ) {
+                $first = strpos( $raw_content, '{' );
+                $last  = strrpos( $raw_content, '}' );
+                if ( $first !== false && $last !== false && $last > $first ) {
+                    $json_candidate = substr( $raw_content, $first, $last - $first + 1 );
+                    $decoded        = json_decode( $json_candidate, true );
+                }
+            }
+        }
+
+        if ( ! is_array( $decoded ) ) {
+            return array( 'error' => 'Could not parse AI response. The service may be experiencing issues.' );
+        }
+
+        if ( isset( $decoded['answer_html'] ) && is_string( $decoded['answer_html'] ) ) {
+            $inner = trim( $decoded['answer_html'] );
+            if ( strlen( $inner ) > 0 && $inner[0] === '{' && strpos( $inner, '"answer_html"' ) !== false ) {
+                $inner_decoded = json_decode( $inner, true );
+                if ( json_last_error() === JSON_ERROR_NONE && is_array( $inner_decoded ) && isset( $inner_decoded['answer_html'] ) ) {
+                    $decoded = $inner_decoded;
+                }
+            }
+        }
+
+        if ( empty( $decoded['answer_html'] ) ) {
+            $decoded['answer_html'] = '<p>AI summary did not return a valid answer.</p>';
+        }
+
+        if ( empty( $decoded['results'] ) || ! is_array( $decoded['results'] ) ) {
+            $decoded['results'] = array();
         }
 
         return $decoded;
