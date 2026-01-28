@@ -20,6 +20,7 @@ define( 'RT_AI_SEARCH_EXCERPT_LENGTH', 200 );
 define( 'RT_AI_SEARCH_MAX_SOURCES_DISPLAY', 5 );
 define( 'RT_AI_SEARCH_API_TIMEOUT', 60 );
 define( 'RT_AI_SEARCH_RATE_LIMIT_WINDOW', 70 );
+define( 'RT_AI_SEARCH_MAX_TOKENS', 1500 );
 
 
 if ( ! defined( 'ABSPATH' ) ) {
@@ -63,7 +64,9 @@ class RivianTrackr_AI_Search {
         global $wp_registered_settings;
         
         if (!isset($wp_registered_settings[$this->option_name])) {
-            error_log('[RivianTrackr AI Search] FORCING registration - option was not registered!');
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                error_log('[RivianTrackr AI Search] FORCING registration - option was not registered!');
+            }
             $this->register_settings();
         }
     }
@@ -131,20 +134,24 @@ class RivianTrackr_AI_Search {
 
         // Add search_query_created index if missing
         if ( ! in_array( 'search_query_created', $index_names, true ) ) {
-            $wpdb->query( 
-                "ALTER TABLE $table_name 
+            $wpdb->query(
+                "ALTER TABLE $table_name
                  ADD INDEX search_query_created (search_query(100), created_at)"
             );
-            error_log( '[RivianTrackr AI Search] Added search_query_created index' );
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                error_log( '[RivianTrackr AI Search] Added search_query_created index' );
+            }
         }
 
         // Add ai_success_created index if missing
         if ( ! in_array( 'ai_success_created', $index_names, true ) ) {
             $wpdb->query(
-                "ALTER TABLE $table_name 
+                "ALTER TABLE $table_name
                  ADD INDEX ai_success_created (ai_success, created_at)"
             );
-            error_log( '[RivianTrackr AI Search] Added ai_success_created index' );
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                error_log( '[RivianTrackr AI Search] Added ai_success_created index' );
+            }
         }
 
         return true;
@@ -180,6 +187,31 @@ class RivianTrackr_AI_Search {
         return $this->logs_table_exists;
     }
 
+    /**
+     * Purge logs older than specified number of days.
+     *
+     * @param int $days Number of days to keep. Logs older than this will be deleted.
+     * @return int|false Number of rows deleted, or false on failure.
+     */
+    private function purge_old_logs( $days = 30 ) {
+        if ( ! $this->logs_table_is_available() ) {
+            return false;
+        }
+
+        global $wpdb;
+        $table_name = self::get_logs_table_name();
+        $cutoff_date = gmdate( 'Y-m-d H:i:s', time() - ( absint( $days ) * DAY_IN_SECONDS ) );
+
+        $deleted = $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM $table_name WHERE created_at < %s",
+                $cutoff_date
+            )
+        );
+
+        return $deleted;
+    }
+
     private function log_search_event( $search_query, $results_count, $ai_success, $ai_error = '' ) {
         if ( empty( $search_query ) ) {
             return;
@@ -212,10 +244,10 @@ class RivianTrackr_AI_Search {
             )
         );
 
-        if ( false === $result ) {
-            error_log( 
-                '[RivianTrackr AI Search] Failed to log search event: ' . 
-                $wpdb->last_error . 
+        if ( false === $result && defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+            error_log(
+                '[RivianTrackr AI Search] Failed to log search event: ' .
+                $wpdb->last_error .
                 ' | Query: ' . substr( $search_query, 0, 50 )
             );
         }
@@ -892,7 +924,9 @@ class RivianTrackr_AI_Search {
         );
 
         if ( is_wp_error( $response ) ) {
-            error_log( '[RivianTrackr AI Search] Model list error: ' . $response->get_error_message() );
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                error_log( '[RivianTrackr AI Search] Model list error: ' . $response->get_error_message() );
+            }
             return array();
         }
 
@@ -900,7 +934,9 @@ class RivianTrackr_AI_Search {
         $body = wp_remote_retrieve_body( $response );
 
         if ( $code < 200 || $code >= 300 ) {
-            error_log( '[RivianTrackr AI Search] Model list HTTP error ' . $code . ' body: ' . $body );
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                error_log( '[RivianTrackr AI Search] Model list HTTP error ' . $code . ' body: ' . $body );
+            }
             return array();
         }
 
@@ -1062,11 +1098,11 @@ class RivianTrackr_AI_Search {
         $cache_cleared     = false;
         $cache_clear_error = '';
 
+        // Handle POST actions (more secure than GET - nonces don't appear in logs/history)
         if (
-            isset( $_GET['rt_ai_refresh_models'] ) &&
-            $_GET['rt_ai_refresh_models'] === '1' &&
-            isset( $_GET['_wpnonce'] ) &&
-            wp_verify_nonce( $_GET['_wpnonce'], 'rt_ai_refresh_models' )
+            isset( $_POST['rt_ai_refresh_models'] ) &&
+            isset( $_POST['_wpnonce'] ) &&
+            wp_verify_nonce( $_POST['_wpnonce'], 'rt_ai_refresh_models' )
         ) {
             if ( empty( $options['api_key'] ) ) {
                 $error = 'Cannot refresh models because no API key is set yet.';
@@ -1081,26 +1117,15 @@ class RivianTrackr_AI_Search {
         }
 
         if (
-            isset( $_GET['rt_ai_clear_cache'] ) &&
-            $_GET['rt_ai_clear_cache'] === '1' &&
-            isset( $_GET['_wpnonce'] ) &&
-            wp_verify_nonce( $_GET['_wpnonce'], 'rt_ai_clear_cache' )
+            isset( $_POST['rt_ai_clear_cache'] ) &&
+            isset( $_POST['_wpnonce'] ) &&
+            wp_verify_nonce( $_POST['_wpnonce'], 'rt_ai_clear_cache' )
         ) {
             $cache_cleared = $this->clear_ai_cache();
             if ( ! $cache_cleared ) {
                 $cache_clear_error = 'Could not clear AI cache.';
             }
         }
-
-        $refresh_url = wp_nonce_url(
-            admin_url( 'admin.php?page=rt-ai-search-settings&rt_ai_refresh_models=1' ),
-            'rt_ai_refresh_models'
-        );
-
-        $clear_cache_url = wp_nonce_url(
-            admin_url( 'admin.php?page=rt-ai-search-settings&rt_ai_clear_cache=1' ),
-            'rt_ai_clear_cache'
-        );
 
         // Check if setup is complete
         $has_api_key = ! empty( $options['api_key'] );
@@ -1252,10 +1277,13 @@ class RivianTrackr_AI_Search {
                                 </select>
                             </div>
                             <div class="rt-ai-field-actions">
-                                <a href="<?php echo esc_url( $refresh_url ); ?>" 
-                                   class="rt-ai-button rt-ai-button-secondary">
-                                    Refresh Models
-                                </a>
+                                <form method="post" style="display: inline;">
+                                    <?php wp_nonce_field( 'rt_ai_refresh_models' ); ?>
+                                    <button type="submit" name="rt_ai_refresh_models" value="1"
+                                            class="rt-ai-button rt-ai-button-secondary">
+                                        Refresh Models
+                                    </button>
+                                </form>
                             </div>
                             <?php if ( is_array( $cache ) && ! empty( $cache['updated_at'] ) ) : ?>
                                 <div style="margin-top: 8px; font-size: 13px; color: #86868b;">
@@ -1308,10 +1336,13 @@ class RivianTrackr_AI_Search {
                                 <span style="margin-left: 8px; color: #86868b; font-size: 14px;">seconds</span>
                             </div>
                             <div class="rt-ai-field-actions">
-                                <a href="<?php echo esc_url( $clear_cache_url ); ?>" 
-                                   class="rt-ai-button rt-ai-button-secondary">
-                                    Clear Cache Now
-                                </a>
+                                <form method="post" style="display: inline;">
+                                    <?php wp_nonce_field( 'rt_ai_clear_cache' ); ?>
+                                    <button type="submit" name="rt_ai_clear_cache" value="1"
+                                            class="rt-ai-button rt-ai-button-secondary">
+                                        Clear Cache Now
+                                    </button>
+                                </form>
                             </div>
                         </div>
 
@@ -1418,13 +1449,15 @@ class RivianTrackr_AI_Search {
 
         $logs_built      = false;
         $logs_error      = '';
+        $logs_purged     = false;
+        $purge_count     = 0;
+        $purge_error     = '';
 
-        // Handle the create/repair action
+        // Handle the create/repair action (POST for security)
         if (
-            isset( $_GET['rt_ai_build_logs'] ) &&
-            $_GET['rt_ai_build_logs'] === '1' &&
-            isset( $_GET['_wpnonce'] ) &&
-            wp_verify_nonce( $_GET['_wpnonce'], 'rt_ai_build_logs' )
+            isset( $_POST['rt_ai_build_logs'] ) &&
+            isset( $_POST['_wpnonce'] ) &&
+            wp_verify_nonce( $_POST['_wpnonce'], 'rt_ai_build_logs' )
         ) {
             $logs_built = $this->ensure_logs_table();
             if ( ! $logs_built ) {
@@ -1432,13 +1465,27 @@ class RivianTrackr_AI_Search {
             }
         }
 
-        // Create the URL for the create/repair button
-        $logs_url = wp_nonce_url(
-            admin_url( 'admin.php?page=rt-ai-search-analytics&rt_ai_build_logs=1' ),
-            'rt_ai_build_logs'
-        );
+        // Handle the purge old logs action (POST for security)
+        if (
+            isset( $_POST['rt_ai_purge_logs'] ) &&
+            isset( $_POST['rt_ai_purge_days'] ) &&
+            isset( $_POST['_wpnonce'] ) &&
+            wp_verify_nonce( $_POST['_wpnonce'], 'rt_ai_purge_logs' )
+        ) {
+            $days = absint( $_POST['rt_ai_purge_days'] );
+            if ( $days < 1 ) {
+                $days = 30;
+            }
+            $result = $this->purge_old_logs( $days );
+            if ( false === $result ) {
+                $purge_error = 'Could not purge logs. The analytics table may not exist.';
+            } else {
+                $logs_purged = true;
+                $purge_count = $result;
+            }
+        }
         ?>
-        
+
         <div class="rt-ai-settings-wrap">
             <!-- Header -->
             <div class="rt-ai-header">
@@ -1457,15 +1504,29 @@ class RivianTrackr_AI_Search {
                 </div>
             <?php endif; ?>
 
+            <?php if ( $logs_purged ) : ?>
+                <div class="rt-ai-notice rt-ai-notice-success">
+                    <?php echo esc_html( number_format( $purge_count ) ); ?> old log entries have been deleted.
+                </div>
+            <?php elseif ( ! empty( $purge_error ) ) : ?>
+                <div class="rt-ai-notice rt-ai-notice-error">
+                    <?php echo esc_html( $purge_error ); ?>
+                </div>
+            <?php endif; ?>
+
             <?php if ( ! $this->logs_table_is_available() ) : ?>
                 <!-- No Data State -->
                 <div class="rt-ai-empty-state">
                     <div class="rt-ai-empty-icon">📊</div>
                     <h3>No Analytics Data Yet</h3>
                     <p>After visitors use search, analytics data will appear here.</p>
-                    <a href="<?php echo esc_url( $logs_url ); ?>" class="rt-ai-button rt-ai-button-primary">
-                        Create Analytics Table
-                    </a>
+                    <form method="post" style="display: inline;">
+                        <?php wp_nonce_field( 'rt_ai_build_logs' ); ?>
+                        <button type="submit" name="rt_ai_build_logs" value="1"
+                                class="rt-ai-button rt-ai-button-primary">
+                            Create Analytics Table
+                        </button>
+                    </form>
                 </div>
             <?php else : ?>
                 <?php $this->render_analytics_content(); ?>
@@ -1739,6 +1800,36 @@ class RivianTrackr_AI_Search {
                 <?php else : ?>
                     <div class="rt-ai-empty-message">No recent search events logged yet.</div>
                 <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- Data Management Section -->
+        <div class="rt-ai-section">
+            <div class="rt-ai-section-header">
+                <h2>Data Management</h2>
+                <p>Manage analytics log data</p>
+            </div>
+            <div class="rt-ai-section-content">
+                <div class="rt-ai-field">
+                    <div class="rt-ai-field-label">
+                        <label>Purge Old Logs</label>
+                    </div>
+                    <div class="rt-ai-field-description">
+                        Delete log entries older than the specified number of days to free up database space.
+                    </div>
+                    <form method="post" style="display: flex; align-items: center; gap: 12px; margin-top: 12px;">
+                        <?php wp_nonce_field( 'rt_ai_purge_logs' ); ?>
+                        <span>Delete logs older than</span>
+                        <input type="number" name="rt_ai_purge_days" value="30" min="1" max="365"
+                               style="width: 80px;" />
+                        <span>days</span>
+                        <button type="submit" name="rt_ai_purge_logs" value="1"
+                                class="rt-ai-button rt-ai-button-secondary"
+                                onclick="return confirm('Are you sure you want to delete old log entries? This action cannot be undone.');">
+                            Purge Old Logs
+                        </button>
+                    </form>
+                </div>
             </div>
         </div>
         <?php
@@ -2526,6 +2617,7 @@ class RivianTrackr_AI_Search {
                     'content' => $user_message,
                 ),
             ),
+            'max_tokens' => RT_AI_SEARCH_MAX_TOKENS, // Limit response length to control API costs
         );
 
         if ( strpos( $model, 'gpt-5' ) !== 0 ) {
@@ -2549,8 +2641,10 @@ class RivianTrackr_AI_Search {
 
         if ( is_wp_error( $response ) ) {
             $error_msg = $response->get_error_message();
-            error_log( '[RivianTrackr AI Search] API request error: ' . $error_msg );
-            
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                error_log( '[RivianTrackr AI Search] API request error: ' . $error_msg );
+            }
+
             // Provide user-friendly error messages based on common errors
             if ( strpos( $error_msg, 'cURL error 28' ) !== false || strpos( $error_msg, 'timed out' ) !== false ) {
                 return array( 'error' => 'Request timed out. The AI service may be slow right now. Please try again.' );
@@ -2558,7 +2652,7 @@ class RivianTrackr_AI_Search {
             if ( strpos( $error_msg, 'cURL error 6' ) !== false || strpos( $error_msg, 'resolve host' ) !== false ) {
                 return array( 'error' => 'Could not connect to AI service. Please check your internet connection.' );
             }
-            
+
             return array( 'error' => 'Connection error: ' . $error_msg );
         }
 
@@ -2566,7 +2660,9 @@ class RivianTrackr_AI_Search {
         $body = wp_remote_retrieve_body( $response );
 
         if ( $code < 200 || $code >= 300 ) {
-            error_log( '[RivianTrackr AI Search] API HTTP error ' . $code . ' body: ' . $body );
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                error_log( '[RivianTrackr AI Search] API HTTP error ' . $code . ' body: ' . $body );
+            }
             $decoded_error = json_decode( $body, true );
             
             if ( isset( $decoded_error['error']['message'] ) ) {
@@ -2592,7 +2688,9 @@ class RivianTrackr_AI_Search {
         $decoded = json_decode( $body, true );
 
         if ( json_last_error() !== JSON_ERROR_NONE ) {
-            error_log( '[RivianTrackr AI Search] Failed to decode OpenAI response: ' . json_last_error_msg() );
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                error_log( '[RivianTrackr AI Search] Failed to decode OpenAI response: ' . json_last_error_msg() );
+            }
             return array( 'error' => 'Could not understand AI response. Please try again.' );
         }
 
