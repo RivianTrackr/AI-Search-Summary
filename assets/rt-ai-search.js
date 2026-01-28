@@ -57,7 +57,11 @@
         }
 
         if (data && data.error) {
-          container.innerHTML = '<p style="margin:0; opacity:0.8;">' + String(data.error) + '</p>';
+          var errorP = document.createElement('p');
+          errorP.style.cssText = 'margin:0; opacity:0.8;';
+          errorP.textContent = String(data.error);
+          container.innerHTML = '';
+          container.appendChild(errorP);
           return;
         }
 

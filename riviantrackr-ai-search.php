@@ -243,11 +243,7 @@ class RivianTrackr_AI_Search {
     }
 
     public function sanitize_options( $input ) {
-        error_log('[RivianTrackr AI Search] sanitize_options() called');
-        error_log('[RivianTrackr AI Search] Input received: ' . print_r($input, true));
-        
         if (!is_array($input)) {
-            error_log('[RivianTrackr AI Search] WARNING: Input is not an array!');
             $input = array();
         }
         
@@ -278,9 +274,7 @@ class RivianTrackr_AI_Search {
         $output['custom_css'] = isset($input['custom_css']) ? wp_strip_all_tags($input['custom_css']) : '';
 
         $this->options_cache = null;
-        
-        error_log('[RivianTrackr AI Search] sanitize_options() output: ' . print_r($output, true));
-        
+
         return $output;
     }
 
@@ -324,11 +318,8 @@ class RivianTrackr_AI_Search {
             return;
         }
         $registered = true;
-        
-        // Log that registration is happening
-        error_log('[RivianTrackr AI Search] register_settings() executing at ' . current_time('mysql'));
-        
-        // ALWAYS register the option itself - this is crucial
+
+        // Register the option itself
         register_setting(
             'rt_ai_search_group',
             $this->option_name,
@@ -413,8 +404,6 @@ class RivianTrackr_AI_Search {
                 'rt_ai_search_main'
             );
         }
-        
-        error_log('[RivianTrackr AI Search] register_settings() completed');
     }
 
     public function field_api_key() {
