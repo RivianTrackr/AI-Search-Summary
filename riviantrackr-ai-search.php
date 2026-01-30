@@ -46,6 +46,7 @@ class RivianTrackr_AI_Search {
 
         // Register settings on admin_init (the recommended hook for Settings API)
         add_action( 'admin_init', array( $this, 'register_settings' ) );
+        add_action( 'admin_init', array( $this, 'maybe_run_migrations' ) );
         add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
         add_action( 'wp_dashboard_setup', array( $this, 'register_dashboard_widget' ) );
         add_action( 'loop_start', array( $this, 'inject_ai_summary_placeholder' ) );
@@ -202,6 +203,21 @@ class RivianTrackr_AI_Search {
         self::add_missing_indexes(); // Ensure indexes exist
         $this->logs_table_checked = false;
         return $this->logs_table_is_available();
+    }
+
+    /**
+     * Run database migrations if needed.
+     * Called on admin_init to ensure schema is up to date.
+     */
+    public function maybe_run_migrations() {
+        $db_version = get_option( 'rt_ai_search_db_version', '1.0' );
+
+        // Version 1.1 adds cache_hit column
+        if ( version_compare( $db_version, '1.1', '<' ) ) {
+            self::add_missing_columns();
+            self::add_missing_indexes();
+            update_option( 'rt_ai_search_db_version', '1.1' );
+        }
     }
 
     private function logs_table_is_available() {
