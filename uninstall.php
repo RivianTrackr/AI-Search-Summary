@@ -20,6 +20,7 @@ delete_option( 'rt_ai_search_options' );
 delete_option( 'rt_ai_search_models_cache' );
 delete_option( 'rt_ai_search_cache_namespace' );
 delete_option( 'rt_ai_search_cache_keys' ); // Legacy option
+delete_option( 'rt_ai_search_db_version' );
 
 // Delete all transients created by the plugin
 // Transients are stored in options table with _transient_ prefix
