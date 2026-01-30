@@ -270,7 +270,7 @@ class RivianTrackr_AI_Search {
         
         $output = array();
 
-        $output['api_key']   = isset($input['api_key']) ? trim($input['api_key']) : '';
+        $output['api_key']   = isset($input['api_key']) ? sanitize_text_field( trim($input['api_key']) ) : '';
         $output['model']     = isset($input['model']) ? sanitize_text_field($input['model']) : 'gpt-4o-mini';
         $output['max_posts'] = isset($input['max_posts']) ? max(1, intval($input['max_posts'])) : 10;
         
