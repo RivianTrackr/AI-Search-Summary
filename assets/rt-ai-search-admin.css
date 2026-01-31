@@ -428,6 +428,11 @@
     color: #86868b;
 }
 
+.rt-ai-badge-info {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
 .rt-ai-empty-state {
     background: #fff;
     border: 1px solid #d2d2d7;
