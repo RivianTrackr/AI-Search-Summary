@@ -168,9 +168,9 @@
   border-radius: 4px;
   background: linear-gradient(
     90deg,
-    rgba(148, 163, 184, 0.15) 25%,
-    rgba(148, 163, 184, 0.3) 50%,
-    rgba(148, 163, 184, 0.15) 75%
+    rgba(148, 163, 184, 0.25) 25%,
+    rgba(148, 163, 184, 0.5) 50%,
+    rgba(148, 163, 184, 0.25) 75%
   );
   background-size: 200% 100%;
   animation: rt-ai-shimmer 1.5s ease-in-out infinite;
