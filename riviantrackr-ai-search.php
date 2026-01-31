@@ -4,7 +4,7 @@ declare(strict_types=1);
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add an OpenAI powered AI summary to WordPress search on RivianTrackr.com without delaying normal results, with analytics, cache control, and collapsible sources.
- * Version: 3.3.7
+ * Version: 3.3.8
  * Author URI: https://riviantrackr.com
  * Author: RivianTrackr
  * License: GPL v2 or later
@@ -335,8 +335,8 @@ class RivianTrackr_AI_Search {
 
         $defaults = array(
             'api_key'              => '',
-            'model'                => 'gpt-4o-mini',
-            'max_posts'            => 10,
+            'model'                => '',
+            'max_posts'            => 20,
             'enable'               => 0,
             'max_calls_per_minute' => 30,
             'cache_ttl'            => RT_AI_SEARCH_DEFAULT_CACHE_TTL,
@@ -357,8 +357,8 @@ class RivianTrackr_AI_Search {
         $output = array();
 
         $output['api_key']   = isset($input['api_key']) ? sanitize_text_field( trim($input['api_key']) ) : '';
-        $output['model']     = isset($input['model']) ? sanitize_text_field($input['model']) : 'gpt-4o-mini';
-        $output['max_posts'] = isset($input['max_posts']) ? max(1, intval($input['max_posts'])) : 10;
+        $output['model']     = isset($input['model']) ? sanitize_text_field($input['model']) : '';
+        $output['max_posts'] = isset($input['max_posts']) ? max(1, intval($input['max_posts'])) : 20;
         
         $output['enable'] = isset($input['enable']) && $input['enable'] ? 1 : 0;
         
@@ -484,8 +484,8 @@ class RivianTrackr_AI_Search {
                 'sanitize_callback' => array( $this, 'sanitize_options' ),
                 'default' => array(
                     'api_key'              => '',
-                    'model'                => 'gpt-4o-mini',
-                    'max_posts'            => 10,
+                    'model'                => '',
+                    'max_posts'            => 20,
                     'enable'               => 0,
                     'max_calls_per_minute' => 30,
                     'cache_ttl'            => RT_AI_SEARCH_DEFAULT_CACHE_TTL,
@@ -1136,9 +1136,6 @@ class RivianTrackr_AI_Search {
                         <div class="rt-ai-field">
                             <div class="rt-ai-field-label">
                                 <label>AI Model</label>
-                            </div>
-                            <div class="rt-ai-field-description">
-                                Recommended: <strong>gpt-4o-mini</strong> (fastest & most cost-effective)
                             </div>
                             <div class="rt-ai-field-input">
                                 <?php
@@ -2387,7 +2384,7 @@ class RivianTrackr_AI_Search {
 
         $max_posts = (int) $options['max_posts'];
         if ( $max_posts < 1 ) {
-            $max_posts = 10;
+            $max_posts = 20;
         }
 
         $post_type = 'any';
