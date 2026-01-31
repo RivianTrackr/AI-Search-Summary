@@ -2673,8 +2673,20 @@ class RivianTrackr_AI_Search {
                     'content' => $user_message,
                 ),
             ),
-            'max_tokens' => RT_AI_SEARCH_MAX_TOKENS,
         );
+
+        // Newer models (gpt-5, o1, o3) use max_completion_tokens instead of max_tokens
+        $uses_completion_tokens = (
+            strpos( $model, 'gpt-5' ) === 0 ||
+            strpos( $model, 'o1' ) === 0 ||
+            strpos( $model, 'o3' ) === 0
+        );
+
+        if ( $uses_completion_tokens ) {
+            $body['max_completion_tokens'] = RT_AI_SEARCH_MAX_TOKENS;
+        } else {
+            $body['max_tokens'] = RT_AI_SEARCH_MAX_TOKENS;
+        }
 
         if ( strpos( $model, 'gpt-5' ) !== 0 ) {
             $body['temperature'] = 0.2;
