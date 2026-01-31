@@ -4,13 +4,13 @@ declare(strict_types=1);
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add an OpenAI powered AI summary to WordPress search on RivianTrackr.com without delaying normal results, with analytics, cache control, and collapsible sources.
- * Version: 3.3.11
+ * Version: 3.3.12
  * Author URI: https://riviantrackr.com
  * Author: RivianTrackr
  * License: GPL v2 or later
  */
 
-define( 'RT_AI_SEARCH_VERSION', '3.3.11' );
+define( 'RT_AI_SEARCH_VERSION', '3.3.12' );
 define( 'RT_AI_SEARCH_MODELS_CACHE_TTL', 7 * DAY_IN_SECONDS );
 define( 'RT_AI_SEARCH_MIN_CACHE_TTL', 60 );
 define( 'RT_AI_SEARCH_MAX_CACHE_TTL', 86400 );
@@ -1481,24 +1481,29 @@ class RivianTrackr_AI_Search {
         $table_name = self::get_logs_table_name();
 
         // Get overview stats
+        // cache_hit values: 0 = miss, 1 = server cache hit, 2 = session/browser cache hit
         $totals = $wpdb->get_row(
             "SELECT
                 COUNT(*) AS total,
                 SUM(ai_success) AS success_count,
                 SUM(CASE WHEN ai_success = 0 AND (ai_error IS NOT NULL AND ai_error <> '') THEN 1 ELSE 0 END) AS error_count,
-                SUM(CASE WHEN cache_hit = 1 THEN 1 ELSE 0 END) AS cache_hits,
+                SUM(CASE WHEN cache_hit IN (1, 2) THEN 1 ELSE 0 END) AS cache_hits,
+                SUM(CASE WHEN cache_hit = 1 THEN 1 ELSE 0 END) AS server_cache_hits,
+                SUM(CASE WHEN cache_hit = 2 THEN 1 ELSE 0 END) AS session_cache_hits,
                 SUM(CASE WHEN cache_hit = 0 THEN 1 ELSE 0 END) AS cache_misses
              FROM $table_name"
         );
 
-        $total_searches = $totals ? (int) $totals->total : 0;
-        $success_count  = $totals ? (int) $totals->success_count : 0;
-        $error_count    = $totals ? (int) $totals->error_count : 0;
-        $cache_hits     = $totals ? (int) $totals->cache_hits : 0;
-        $cache_misses   = $totals ? (int) $totals->cache_misses : 0;
-        $cache_total    = $cache_hits + $cache_misses;
-        $cache_hit_rate = $cache_total > 0 ? round( ( $cache_hits / $cache_total ) * 100, 1 ) : 0;
-        $success_rate   = $this->calculate_success_rate( $success_count, $total_searches );
+        $total_searches      = $totals ? (int) $totals->total : 0;
+        $success_count       = $totals ? (int) $totals->success_count : 0;
+        $error_count         = $totals ? (int) $totals->error_count : 0;
+        $cache_hits          = $totals ? (int) $totals->cache_hits : 0;
+        $server_cache_hits   = $totals ? (int) $totals->server_cache_hits : 0;
+        $session_cache_hits  = $totals ? (int) $totals->session_cache_hits : 0;
+        $cache_misses        = $totals ? (int) $totals->cache_misses : 0;
+        $cache_total         = $cache_hits + $cache_misses;
+        $cache_hit_rate      = $cache_total > 0 ? round( ( $cache_hits / $cache_total ) * 100, 1 ) : 0;
+        $success_rate        = $this->calculate_success_rate( $success_count, $total_searches );
 
         $no_results_count = (int) $wpdb->get_var(
             "SELECT COUNT(*) FROM $table_name WHERE results_count = 0"
@@ -1517,7 +1522,7 @@ class RivianTrackr_AI_Search {
                 DATE(created_at) AS day,
                 COUNT(*) AS total,
                 SUM(ai_success) AS success_count,
-                SUM(CASE WHEN cache_hit = 1 THEN 1 ELSE 0 END) AS cache_hits,
+                SUM(CASE WHEN cache_hit IN (1, 2) THEN 1 ELSE 0 END) AS cache_hits,
                 SUM(CASE WHEN cache_hit = 0 THEN 1 ELSE 0 END) AS cache_misses
              FROM $table_name
              GROUP BY DATE(created_at)
@@ -1567,6 +1572,7 @@ class RivianTrackr_AI_Search {
             <div class="rt-ai-stat-card">
                 <div class="rt-ai-stat-label">Cache Hits</div>
                 <div class="rt-ai-stat-value"><?php echo number_format( $cache_hits ); ?></div>
+                <div class="rt-ai-stat-detail">Server: <?php echo number_format( $server_cache_hits ); ?> · Browser: <?php echo number_format( $session_cache_hits ); ?></div>
             </div>
             <div class="rt-ai-stat-card">
                 <div class="rt-ai-stat-label">Cache Misses</div>
@@ -1757,9 +1763,13 @@ class RivianTrackr_AI_Search {
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <?php if ( $event->cache_hit === '1' || $event->cache_hit === 1 ) : ?>
-                                                <span class="rt-ai-badge rt-ai-badge-success">Hit</span>
-                                            <?php elseif ( $event->cache_hit === '0' || $event->cache_hit === 0 ) : ?>
+                                            <?php
+                                            $cache_val = $event->cache_hit !== null ? (int) $event->cache_hit : null;
+                                            if ( $cache_val === 1 ) : ?>
+                                                <span class="rt-ai-badge rt-ai-badge-success" title="Server cache hit">Hit</span>
+                                            <?php elseif ( $cache_val === 2 ) : ?>
+                                                <span class="rt-ai-badge rt-ai-badge-info" title="Browser session cache hit">Session</span>
+                                            <?php elseif ( $cache_val === 0 ) : ?>
                                                 <span class="rt-ai-badge rt-ai-badge-warning">Miss</span>
                                             <?php else : ?>
                                                 <span class="rt-ai-badge rt-ai-badge-muted">N/A</span>
@@ -2216,6 +2226,45 @@ class RivianTrackr_AI_Search {
                 ),
             )
         );
+
+        // Lightweight endpoint for logging frontend (session) cache hits
+        register_rest_route(
+            'rt-ai-search/v1',
+            '/log-session-hit',
+            array(
+                'methods'             => 'POST',
+                'callback'            => array( $this, 'rest_log_session_cache_hit' ),
+                'permission_callback' => array( $this, 'rest_permission_check' ),
+                'args'                => array(
+                    'q' => array(
+                        'required'          => true,
+                        'sanitize_callback' => 'sanitize_text_field',
+                        'validate_callback' => array( $this, 'validate_search_query' ),
+                    ),
+                ),
+            )
+        );
+    }
+
+    /**
+     * Log a frontend session cache hit to analytics.
+     * This is a lightweight endpoint that only logs - no AI processing.
+     *
+     * @param WP_REST_Request $request Request object.
+     * @return WP_REST_Response Response object.
+     */
+    public function rest_log_session_cache_hit( $request ) {
+        $search_query = $request->get_param( 'q' );
+
+        if ( empty( $search_query ) ) {
+            return rest_ensure_response( array( 'logged' => false ) );
+        }
+
+        // Log as a session cache hit (cache_hit = 2 to distinguish from server cache hits)
+        // We use 2 to indicate "session/browser cache hit" vs 1 for "server cache hit"
+        $this->log_search_event( $search_query, 0, 1, '', 2 );
+
+        return rest_ensure_response( array( 'logged' => true ) );
     }
 
     /**
