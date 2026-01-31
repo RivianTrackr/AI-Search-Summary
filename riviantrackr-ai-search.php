@@ -2555,15 +2555,41 @@ class RivianTrackr_AI_Search {
             return null;
         }
 
-        if ( empty( $api_response['choices'][0]['message']['content'] ) ) {
-            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-                error_log( '[RivianTrackr AI Search] Empty response. Full API response: ' . wp_json_encode( $api_response ) );
-            }
-            $ai_error = 'OpenAI returned an empty response. Please try again.';
+        // Check for model refusal (newer models)
+        if ( ! empty( $api_response['choices'][0]['message']['refusal'] ) ) {
+            $ai_error = 'The AI model declined to answer this query.';
             return null;
         }
 
-        $raw_content = $api_response['choices'][0]['message']['content'];
+        // Get content - check multiple possible locations
+        $raw_content = null;
+        if ( ! empty( $api_response['choices'][0]['message']['content'] ) ) {
+            $raw_content = $api_response['choices'][0]['message']['content'];
+        } elseif ( ! empty( $api_response['choices'][0]['text'] ) ) {
+            // Legacy completion format
+            $raw_content = $api_response['choices'][0]['text'];
+        } elseif ( ! empty( $api_response['output'] ) ) {
+            // Some newer models use 'output' field
+            $raw_content = is_array( $api_response['output'] )
+                ? wp_json_encode( $api_response['output'] )
+                : $api_response['output'];
+        }
+
+        if ( empty( $raw_content ) ) {
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                error_log( '[RivianTrackr AI Search] Empty response. Full API response: ' . wp_json_encode( $api_response ) );
+            }
+            // Check if there's a finish_reason that explains the empty response
+            $finish_reason = $api_response['choices'][0]['finish_reason'] ?? 'unknown';
+            if ( $finish_reason === 'content_filter' ) {
+                $ai_error = 'The response was filtered by content policy. Please try a different search.';
+            } elseif ( $finish_reason === 'length' ) {
+                $ai_error = 'The response was truncated. Please try a simpler search.';
+            } else {
+                $ai_error = 'OpenAI returned an empty response (reason: ' . $finish_reason . '). Please try again.';
+            }
+            return null;
+        }
 
         if ( is_array( $raw_content ) ) {
             $decoded = $raw_content;
@@ -2684,8 +2710,12 @@ class RivianTrackr_AI_Search {
         );
 
         // Newer models (gpt-5, o1, o3) use max_completion_tokens instead of max_tokens
+        // These models also use "reasoning tokens" which count against the limit,
+        // so we need a much higher limit to leave room for actual output
         if ( $is_gpt5 || $is_o_series ) {
-            $body['max_completion_tokens'] = RT_AI_SEARCH_MAX_TOKENS;
+            // Reasoning models need higher limits: reasoning tokens + output tokens
+            // Using 16000 to allow for extensive reasoning while still getting output
+            $body['max_completion_tokens'] = 16000;
         } else {
             $body['max_tokens'] = RT_AI_SEARCH_MAX_TOKENS;
         }
