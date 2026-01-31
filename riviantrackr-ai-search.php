@@ -2556,6 +2556,9 @@ class RivianTrackr_AI_Search {
         }
 
         if ( empty( $api_response['choices'][0]['message']['content'] ) ) {
+            if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+                error_log( '[RivianTrackr AI Search] Empty response. Full API response: ' . wp_json_encode( $api_response ) );
+            }
             $ai_error = 'OpenAI returned an empty response. Please try again.';
             return null;
         }
@@ -2655,10 +2658,15 @@ class RivianTrackr_AI_Search {
         $user_message  = "User search query: {$user_query}\n\n";
         $user_message .= "Here are the posts from the site (with newer posts listed first where possible):\n\n{$posts_text}";
 
+        // Determine model capabilities
+        $is_gpt5 = strpos( $model, 'gpt-5' ) === 0;
+        $is_o_series = strpos( $model, 'o1' ) === 0 || strpos( $model, 'o3' ) === 0;
+
+        // GPT-4o and GPT-4.1 support json_object response format
+        // GPT-5 and o-series may have different requirements
         $supports_response_format = (
             strpos( $model, 'gpt-4o' ) === 0 ||
-            strpos( $model, 'gpt-4.1' ) === 0 ||
-            strpos( $model, 'gpt-5' ) === 0
+            strpos( $model, 'gpt-4.1' ) === 0
         );
 
         $body = array(
@@ -2676,19 +2684,15 @@ class RivianTrackr_AI_Search {
         );
 
         // Newer models (gpt-5, o1, o3) use max_completion_tokens instead of max_tokens
-        $uses_completion_tokens = (
-            strpos( $model, 'gpt-5' ) === 0 ||
-            strpos( $model, 'o1' ) === 0 ||
-            strpos( $model, 'o3' ) === 0
-        );
-
-        if ( $uses_completion_tokens ) {
+        if ( $is_gpt5 || $is_o_series ) {
             $body['max_completion_tokens'] = RT_AI_SEARCH_MAX_TOKENS;
         } else {
             $body['max_tokens'] = RT_AI_SEARCH_MAX_TOKENS;
         }
 
-        if ( strpos( $model, 'gpt-5' ) !== 0 ) {
+        // o-series (reasoning models) don't support temperature
+        // gpt-5 may have different defaults
+        if ( ! $is_o_series && ! $is_gpt5 ) {
             $body['temperature'] = 0.2;
         }
 
