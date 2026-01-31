@@ -2710,8 +2710,12 @@ class RivianTrackr_AI_Search {
         );
 
         // Newer models (gpt-5, o1, o3) use max_completion_tokens instead of max_tokens
+        // These models also use "reasoning tokens" which count against the limit,
+        // so we need a much higher limit to leave room for actual output
         if ( $is_gpt5 || $is_o_series ) {
-            $body['max_completion_tokens'] = RT_AI_SEARCH_MAX_TOKENS;
+            // Reasoning models need higher limits: reasoning tokens + output tokens
+            // Using 16000 to allow for extensive reasoning while still getting output
+            $body['max_completion_tokens'] = 16000;
         } else {
             $body['max_tokens'] = RT_AI_SEARCH_MAX_TOKENS;
         }
