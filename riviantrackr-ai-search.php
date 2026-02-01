@@ -4,13 +4,13 @@ declare(strict_types=1);
  * Plugin Name: RivianTrackr AI Search
  * Plugin URI: https://github.com/RivianTrackr/RivianTrackr-AI-Search
  * Description: Add an OpenAI powered AI summary to WordPress search on RivianTrackr.com without delaying normal results, with analytics, cache control, and collapsible sources.
- * Version: 3.3.17
+ * Version: 3.3.18
  * Author URI: https://riviantrackr.com
  * Author: RivianTrackr
  * License: GPL v2 or later
  */
 
-define( 'RT_AI_SEARCH_VERSION', '3.3.17' );
+define( 'RT_AI_SEARCH_VERSION', '3.3.18' );
 define( 'RT_AI_SEARCH_MODELS_CACHE_TTL', 7 * DAY_IN_SECONDS );
 define( 'RT_AI_SEARCH_MIN_CACHE_TTL', 60 );
 define( 'RT_AI_SEARCH_MAX_CACHE_TTL', 86400 );
@@ -379,6 +379,13 @@ class RivianTrackr_AI_Search {
         }
         
         $output['custom_css'] = isset($input['custom_css']) ? $this->sanitize_custom_css($input['custom_css']) : '';
+
+        // Auto-clear cache when model changes
+        $old_options = get_option( $this->option_name, array() );
+        $old_model = isset( $old_options['model'] ) ? $old_options['model'] : '';
+        if ( $output['model'] !== $old_model && ! empty( $output['model'] ) ) {
+            $this->bump_cache_namespace();
+        }
 
         $this->options_cache = null;
 
