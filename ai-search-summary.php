@@ -1643,8 +1643,6 @@ class AI_Search_Summary {
                 SUM(ai_success) AS success_count,
                 SUM(CASE WHEN ai_success = 0 AND (ai_error IS NOT NULL AND ai_error <> '') THEN 1 ELSE 0 END) AS error_count,
                 SUM(CASE WHEN cache_hit IN (1, 2) THEN 1 ELSE 0 END) AS cache_hits,
-                SUM(CASE WHEN cache_hit = 1 THEN 1 ELSE 0 END) AS server_cache_hits,
-                SUM(CASE WHEN cache_hit = 2 THEN 1 ELSE 0 END) AS session_cache_hits,
                 SUM(CASE WHEN cache_hit = 0 THEN 1 ELSE 0 END) AS cache_misses
              FROM $table_name"
         );
@@ -1653,8 +1651,6 @@ class AI_Search_Summary {
         $success_count       = $totals ? (int) $totals->success_count : 0;
         $error_count         = $totals ? (int) $totals->error_count : 0;
         $cache_hits          = $totals ? (int) $totals->cache_hits : 0;
-        $server_cache_hits   = $totals ? (int) $totals->server_cache_hits : 0;
-        $session_cache_hits  = $totals ? (int) $totals->session_cache_hits : 0;
         $cache_misses        = $totals ? (int) $totals->cache_misses : 0;
         $cache_total         = $cache_hits + $cache_misses;
         $cache_hit_rate      = $cache_total > 0 ? round( ( $cache_hits / $cache_total ) * 100, 1 ) : 0;
@@ -1727,7 +1723,6 @@ class AI_Search_Summary {
             <div class="aiss-stat-card">
                 <div class="aiss-stat-label">Cache Hits</div>
                 <div class="aiss-stat-value"><?php echo number_format( $cache_hits ); ?></div>
-                <div class="aiss-stat-detail">Server: <?php echo number_format( $server_cache_hits ); ?> · Browser: <?php echo number_format( $session_cache_hits ); ?></div>
             </div>
             <div class="aiss-stat-card">
                 <div class="aiss-stat-label">Cache Misses</div>
