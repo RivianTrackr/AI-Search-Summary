@@ -449,10 +449,20 @@ class AI_Search_Summary {
 
         $output['custom_css'] = isset($input['custom_css']) ? $this->sanitize_custom_css($input['custom_css']) : '';
 
-        // Auto-clear cache when model changes
+        // Auto-clear cache when model or display settings change
         $old_options = get_option( $this->option_name, array() );
         $old_model = isset( $old_options['model'] ) ? $old_options['model'] : '';
+        $old_show_sources = isset( $old_options['show_sources'] ) ? $old_options['show_sources'] : 1;
+
+        $cache_invalidating_change = false;
         if ( $output['model'] !== $old_model && ! empty( $output['model'] ) ) {
+            $cache_invalidating_change = true;
+        }
+        if ( $output['show_sources'] !== $old_show_sources ) {
+            $cache_invalidating_change = true;
+        }
+
+        if ( $cache_invalidating_change ) {
             $this->bump_cache_namespace();
         }
 
