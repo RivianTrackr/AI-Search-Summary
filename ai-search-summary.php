@@ -2238,7 +2238,7 @@ class AI_Search_Summary {
                     <?php endif; ?>
                 </div>
 
-                <div id="aiss-summary-content" class="aiss-summary-content" aria-live="polite">
+                <div id="aiss-search-summary-content" class="aiss-search-summary-content" aria-live="polite">
                     <span class="aiss-spinner" role="status" aria-label="Loading AI summary"></span>
                     <p class="aiss-loading-text">Generating summary based on your search and <?php echo esc_html( $site_name ); ?> articles...</p>
                 </div>
