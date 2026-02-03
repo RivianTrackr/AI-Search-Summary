@@ -1375,7 +1375,6 @@ class AI_Search_Summary {
                         <div class="aiss-field">
                             <div class="aiss-field-label">
                                 <label for="aiss-api-key">OpenAI API Key</label>
-                                <span class="aiss-field-required">Required</span>
                                 <?php
                                 $key_valid = isset( $options['api_key_valid'] ) ? $options['api_key_valid'] : null;
                                 if ( $this->is_api_key_from_constant() || ( ! empty( $options['api_key'] ) && $key_valid === true ) ) : ?>
