@@ -840,12 +840,3 @@
     color: #1d1d1f;
 }
 
-/* Color Picker Fields */
-.aiss-field-color .aiss-field-description {
-    margin: 0 0 8px 0;
-}
-
-.aiss-field-color .wp-picker-container .wp-color-result {
-    margin: 0;
-    border-radius: 6px;
-}
