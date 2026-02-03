@@ -1623,20 +1623,22 @@ class AI_Search_Summary {
                         <p>Customize the look of AI summaries to match your theme</p>
                     </div>
                     <div class="aiss-section-content">
-                        <div class="aiss-field aiss-field-color">
+                        <div class="aiss-field">
                             <div class="aiss-field-label">
                                 <label for="aiss-color-background">Background Color</label>
+                            </div>
+                            <div class="aiss-field-description">
+                                Hex color code (e.g. #121e2b)
                             </div>
                             <div class="aiss-field-input">
                                 <input type="text"
                                        id="aiss-color-background"
                                        name="<?php echo esc_attr( $this->option_name ); ?>[color_background]"
                                        value="<?php echo esc_attr( isset( $options['color_background'] ) ? $options['color_background'] : '#121e2b' ); ?>"
-                                       class="aiss-color-picker"
-                                       data-default-color="#121e2b" />
+                                       placeholder="#121e2b" />
                             </div>
                         </div>
-                        <div class="aiss-field aiss-field-color">
+                        <div class="aiss-field">
                             <div class="aiss-field-label">
                                 <label for="aiss-color-text">Text Color</label>
                             </div>
@@ -1645,11 +1647,10 @@ class AI_Search_Summary {
                                        id="aiss-color-text"
                                        name="<?php echo esc_attr( $this->option_name ); ?>[color_text]"
                                        value="<?php echo esc_attr( isset( $options['color_text'] ) ? $options['color_text'] : '#e5e7eb' ); ?>"
-                                       class="aiss-color-picker"
-                                       data-default-color="#e5e7eb" />
+                                       placeholder="#e5e7eb" />
                             </div>
                         </div>
-                        <div class="aiss-field aiss-field-color">
+                        <div class="aiss-field">
                             <div class="aiss-field-label">
                                 <label for="aiss-color-accent">Accent Color</label>
                             </div>
@@ -1661,11 +1662,10 @@ class AI_Search_Summary {
                                        id="aiss-color-accent"
                                        name="<?php echo esc_attr( $this->option_name ); ?>[color_accent]"
                                        value="<?php echo esc_attr( isset( $options['color_accent'] ) ? $options['color_accent'] : '#fba919' ); ?>"
-                                       class="aiss-color-picker"
-                                       data-default-color="#fba919" />
+                                       placeholder="#fba919" />
                             </div>
                         </div>
-                        <div class="aiss-field aiss-field-color">
+                        <div class="aiss-field">
                             <div class="aiss-field-label">
                                 <label for="aiss-color-border">Border Color</label>
                             </div>
@@ -1674,8 +1674,7 @@ class AI_Search_Summary {
                                        id="aiss-color-border"
                                        name="<?php echo esc_attr( $this->option_name ); ?>[color_border]"
                                        value="<?php echo esc_attr( isset( $options['color_border'] ) ? $options['color_border'] : '#94a3b8' ); ?>"
-                                       class="aiss-color-picker"
-                                       data-default-color="#94a3b8" />
+                                       placeholder="#94a3b8" />
                             </div>
                         </div>
 
@@ -1807,8 +1806,6 @@ class AI_Search_Summary {
                     });
                 });
 
-                // Initialize color pickers
-                $('.aiss-color-picker').wpColorPicker();
             });
         })(jQuery);
         </script>
@@ -2570,14 +2567,10 @@ class AI_Search_Summary {
 
         $version = AI_SEARCH_VERSION;
 
-        // Enqueue WordPress color picker
-        wp_enqueue_style( 'wp-color-picker' );
-        wp_enqueue_script( 'wp-color-picker' );
-
         wp_enqueue_style(
             'aiss-admin',
             plugin_dir_url( __FILE__ ) . 'assets/aiss-admin.css',
-            array( 'wp-color-picker' ),
+            array(),
             $version
         );
     }
