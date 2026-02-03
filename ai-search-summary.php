@@ -595,6 +595,10 @@ class AI_Search_Summary {
 .aiss-summary-inner .aiss-disclaimer {
     color: {$text};
 }
+.aiss-openai-badge,
+.aiss-openai-badge .aiss-openai-text {
+    color: #e5e7eb;
+}
 .aiss-search-summary-content {
     color: {$text};
 }
