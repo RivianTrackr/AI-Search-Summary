@@ -397,7 +397,8 @@ class AI_Search_Summary {
             'color_text'           => '#e5e7eb',
             'color_accent'         => '#fba919',
             'color_border'         => '#94a3b8',
-            'custom_css'           => '',
+            'custom_css'              => '',
+            'allow_reasoning_models'  => 0,
         );
 
         $opts = get_option( $this->option_name, array() );
@@ -484,6 +485,7 @@ class AI_Search_Summary {
         $output['color_border'] = isset($input['color_border']) ? $this->sanitize_color($input['color_border'], '#94a3b8') : '#94a3b8';
 
         $output['custom_css'] = isset($input['custom_css']) ? $this->sanitize_custom_css($input['custom_css']) : '';
+        $output['allow_reasoning_models'] = isset($input['allow_reasoning_models']) && $input['allow_reasoning_models'] ? 1 : 0;
 
         // Auto-clear cache when model, token limit, or display settings change
         $old_model       = isset( $old_options['model'] ) ? $old_options['model'] : '';
@@ -1114,6 +1116,23 @@ class AI_Search_Summary {
 }';
     }
 
+    /**
+     * Check if a model ID is a reasoning model (slow, expensive, not suited for search summaries).
+     * Matches: o1, o3, o4, etc. and gpt-5* (reasoning-class models).
+     * Does NOT match: gpt-4o (the "o" is part of the model name, not the o-series).
+     */
+    private static function is_reasoning_model( $model_id ) {
+        // o-series reasoning models: o1, o3, o4-mini, etc.
+        if ( preg_match( '/^o\d/', $model_id ) ) {
+            return true;
+        }
+        // GPT-5 class models are reasoning models
+        if ( strpos( $model_id, 'gpt-5' ) === 0 ) {
+            return true;
+        }
+        return false;
+    }
+
     private function fetch_models_from_openai( $api_key ) {
         if ( empty( $api_key ) ) {
             return array();
@@ -1160,19 +1179,20 @@ class AI_Search_Summary {
 
             $id = $model['id'];
 
+            // Include chat/completion models and o-series reasoning models
             if (
-                        strpos( $id, 'gpt-5.1' ) === 0 ||
-                        strpos( $id, 'gpt-5' ) === 0 ||
-                        strpos( $id, 'gpt-4.1' ) === 0 ||
-                        strpos( $id, 'gpt-4o' ) === 0 ||
-                        strpos( $id, 'gpt-4-turbo' ) === 0 ||
-                        strpos( $id, 'gpt-4-' ) === 0 ||
-                        strpos( $id, 'gpt-4' ) === 0 ||
-                        strpos( $id, 'gpt-3.5-turbo' ) === 0
-                    ) {
-                        $models[] = $id;
-                    }
-                }
+                strpos( $id, 'gpt-5' ) === 0 ||
+                strpos( $id, 'gpt-4.1' ) === 0 ||
+                strpos( $id, 'gpt-4o' ) === 0 ||
+                strpos( $id, 'gpt-4-turbo' ) === 0 ||
+                strpos( $id, 'gpt-4-' ) === 0 ||
+                strpos( $id, 'gpt-4' ) === 0 ||
+                strpos( $id, 'gpt-3.5-turbo' ) === 0 ||
+                preg_match( '/^o\d/', $id )
+            ) {
+                $models[] = $id;
+            }
+        }
 
         $models = array_unique( $models );
         sort( $models );
@@ -1191,12 +1211,6 @@ class AI_Search_Summary {
             'gpt-4.1',
             'gpt-4',
             'gpt-3.5-turbo',
-            // Future models (base names only)
-            'gpt-5.2',
-            'gpt-5.1',
-            'gpt-5',
-            'gpt-5-mini',
-            'gpt-5-nano',
         );
 
         if ( empty( $api_key ) ) {
@@ -1207,35 +1221,47 @@ class AI_Search_Summary {
         $cached_models = ( is_array( $cache ) && ! empty( $cache['models'] ) ) ? $cache['models'] : array();
         $updated_at    = ( is_array( $cache ) && ! empty( $cache['updated_at'] ) ) ? absint( $cache['updated_at'] ) : 0;
 
+        $models = null;
+
         // Use cached models if they exist and are still within TTL.
         if ( ! empty( $cached_models ) && $updated_at > 0 ) {
             $age = time() - $updated_at;
             if ( $age >= 0 && $age < AISS_MODELS_CACHE_TTL ) {
-                return $cached_models;
+                $models = $cached_models;
             }
         }
 
         // Cache is missing or stale, try to refresh from OpenAI.
-        $models = $this->fetch_models_from_openai( $api_key );
+        if ( null === $models ) {
+            $fetched = $this->fetch_models_from_openai( $api_key );
 
-        if ( ! empty( $models ) ) {
-            update_option(
-                $this->models_cache_option,
-                array(
-                    'models'     => $models,
-                    'updated_at' => time(),
-                )
-            );
-
-            return $models;
+            if ( ! empty( $fetched ) ) {
+                update_option(
+                    $this->models_cache_option,
+                    array(
+                        'models'     => $fetched,
+                        'updated_at' => time(),
+                    )
+                );
+                $models = $fetched;
+            } elseif ( ! empty( $cached_models ) ) {
+                $models = $cached_models;
+            } else {
+                $models = $default_models;
+            }
         }
 
-        // If refresh failed, fall back to cached models if available, otherwise defaults.
-        if ( ! empty( $cached_models ) ) {
-            return $cached_models;
+        // Filter out reasoning models unless the advanced setting is enabled
+        $options = $this->get_options();
+        $allow_reasoning = ! empty( $options['allow_reasoning_models'] );
+
+        if ( ! $allow_reasoning ) {
+            $models = array_values( array_filter( $models, function( $id ) {
+                return ! self::is_reasoning_model( $id );
+            } ) );
         }
 
-        return $default_models;
+        return $models;
     }
 
     private function refresh_model_cache( $api_key ) {
@@ -1739,6 +1765,36 @@ class AI_Search_Summary {
                                 Override default styles with your own CSS for complete control
                             </div>
                             <?php $this->field_custom_css(); ?>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 5: Advanced -->
+                <div class="aiss-section">
+                    <div class="aiss-section-header">
+                        <h2>Advanced</h2>
+                        <p>Settings for advanced users</p>
+                    </div>
+                    <div class="aiss-section-content">
+                        <div class="aiss-field">
+                            <div class="aiss-field-label">
+                                <label>Allow Reasoning Models</label>
+                            </div>
+                            <div class="aiss-field-description">
+                                Enable reasoning models (GPT-5, o1, o3, etc.) in the model dropdown. These models are significantly slower (60-300s) and more expensive due to hidden reasoning tokens. They do not produce better search summaries than standard models like GPT-4o or GPT-4.1.
+                            </div>
+                            <div class="aiss-toggle-wrapper">
+                                <label class="aiss-toggle">
+                                    <input type="checkbox"
+                                           name="<?php echo esc_attr( $this->option_name ); ?>[allow_reasoning_models]"
+                                           value="1"
+                                           <?php checked( ! empty( $options['allow_reasoning_models'] ), true ); ?> />
+                                    <span class="aiss-toggle-slider"></span>
+                                </label>
+                                <span class="aiss-toggle-label">
+                                    <?php echo ! empty( $options['allow_reasoning_models'] ) ? 'Enabled' : 'Disabled'; ?>
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -3335,11 +3391,10 @@ class AI_Search_Summary {
         $user_message .= "Here are the posts from the site (with newer posts listed first where possible):\n\n{$posts_text}";
 
         // Determine model capabilities
-        $is_gpt5 = strpos( $model, 'gpt-5' ) === 0;
-        $is_o_series = strpos( $model, 'o1' ) === 0 || strpos( $model, 'o3' ) === 0;
+        $is_reasoning = self::is_reasoning_model( $model );
 
         // GPT-4o and GPT-4.1 support json_object response format
-        // GPT-5 and o-series may have different requirements
+        // Reasoning models may have different requirements
         $supports_response_format = (
             strpos( $model, 'gpt-4o' ) === 0 ||
             strpos( $model, 'gpt-4.1' ) === 0
@@ -3362,18 +3417,16 @@ class AI_Search_Summary {
         // Use the admin-configured max tokens setting
         $configured_tokens = isset( $options['max_tokens'] ) ? (int) $options['max_tokens'] : AISS_MAX_TOKENS;
 
-        // Newer models (gpt-5, o1, o3) use max_completion_tokens instead of max_tokens
-        // These models also use "reasoning tokens" which count against the limit,
-        // so we need a much higher limit to leave room for actual output
-        if ( $is_gpt5 || $is_o_series ) {
+        // Reasoning models use max_completion_tokens and need a higher limit
+        // to leave room for hidden reasoning tokens
+        if ( $is_reasoning ) {
             $body['max_completion_tokens'] = max( $configured_tokens, 16000 );
         } else {
             $body['max_tokens'] = $configured_tokens;
         }
 
-        // o-series (reasoning models) don't support temperature
-        // gpt-5 may have different defaults
-        if ( ! $is_o_series && ! $is_gpt5 ) {
+        // Reasoning models don't support temperature
+        if ( ! $is_reasoning ) {
             $body['temperature'] = 0.2;
         }
 
